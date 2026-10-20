@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Secrets: real values live in Render's settings, never in git.
+.env
+.env.*
+!.env.example
+
+.DS_Store
+npm-debug.log*
+.swc/
