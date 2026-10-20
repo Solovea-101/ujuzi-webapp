@@ -1,4 +1,5 @@
 import {
+  CERTIFICATE_NO_PATTERN,
   formatCertificateNo,
   formatId,
   StoreConflictError,
@@ -29,9 +30,17 @@ import {
   type UserRow,
 } from './types';
 
-// Rows leave the store as copies, so a caller changing one cannot change what is stored.
-const copy = <T>(row: T): T => structuredClone(row);
-const copies = <T>(rows: T[]): T[] => rows.map(copy);
+// Rows leave the store as copies, so a caller changing one cannot change what is stored. Rows are
+// flat (strings, numbers, booleans, null and Dates), so copying the Dates is all a copy needs.
+const copy = <T extends object>(row: T): T => {
+  const out = { ...row };
+  for (const key of Object.keys(out) as Array<keyof T>) {
+    const value = out[key];
+    if (value instanceof Date) out[key] = new Date(value) as T[keyof T];
+  }
+  return out;
+};
+const copies = <T extends object>(rows: T[]): T[] => rows.map((row) => copy(row));
 
 /**
  * The in-memory Store: used when DATABASE_URL is unset (tests, clean clones). It enforces the same
@@ -120,7 +129,7 @@ export class MemoryStore implements Store {
       .map((course) => this.detail(course))
       .filter((course) => !filter.category || course.category === filter.category)
       .filter((course) => !county || course.county.toLowerCase() === county)
-      .map(copy);
+      .map((row) => copy(row));
   }
 
   async getCourse(id: string): Promise<CourseDetailRow | undefined> {
@@ -210,12 +219,21 @@ export class MemoryStore implements Store {
         throw new StoreConflictError(`A certificate was already issued for ${input.enrolment_id}`);
       }
     }
-    this.counters.certificate += 1;
-    const row: CertificateRow = {
-      certificate_no: formatCertificateNo(Number(input.issued_on.slice(0, 4)), this.counters.certificate),
-      ...input,
-      revoked_at: null,
-    };
+    const { certificate_no: named, ...fields } = input;
+    let certificateNo: string;
+    if (named !== undefined) {
+      if (!CERTIFICATE_NO_PATTERN.test(named)) throw new Error(`Certificate number ${named} is malformed`);
+      if (this.certificates.has(named)) throw new StoreConflictError(`Certificate ${named} already exists`);
+      certificateNo = named;
+    } else {
+      // Skip numbers that seed data or an earlier call already took.
+      const year = Number(input.issued_on.slice(0, 4));
+      do {
+        this.counters.certificate += 1;
+        certificateNo = formatCertificateNo(year, this.counters.certificate);
+      } while (this.certificates.has(certificateNo));
+    }
+    const row: CertificateRow = { certificate_no: certificateNo, ...fields, revoked_at: null };
     this.certificates.set(row.certificate_no, row);
     return copy(row);
   }
@@ -229,10 +247,17 @@ export class MemoryStore implements Store {
 
   async listCertificates(graduateId: string): Promise<CertificateRow[]> {
     return copies(
-      [...this.certificates.values()].filter(
-        (c) => this.enrolments.get(c.enrolment_id)?.graduate_id === graduateId,
-      ),
+      [...this.certificates.values()]
+        .filter((c) => this.enrolments.get(c.enrolment_id)?.graduate_id === graduateId)
+        .sort((a, b) => a.certificate_no.localeCompare(b.certificate_no)),
     );
+  }
+
+  async revokeCertificate(certificateNo: string): Promise<CertificateRow | undefined> {
+    const row = this.certificates.get(certificateNo);
+    if (!row) return undefined;
+    row.revoked_at ??= new Date();
+    return copy(row);
   }
 
   // ---- Bookings ---------------------------------------------------------------------------------
@@ -322,6 +347,6 @@ export class MemoryStore implements Store {
   }
 }
 
-function copyOrUndefined<T>(row: T | undefined): T | undefined {
+function copyOrUndefined<T extends object>(row: T | undefined): T | undefined {
   return row === undefined ? undefined : copy(row);
 }
