@@ -1,9 +1,9 @@
-# Ujuzi API contract, draft 0.1.0 (partner-facing endpoints 1-7 and 24).
+# Ujuzi API contract, draft 0.1.1 (partner-facing endpoints 1-7 and 24).
 # TODO Week 4: add the website endpoints 8-23 from ENDPOINT_LIST.md before handoff.
 openapi: 3.0.3
 info:
   title: Ujuzi API
-  version: 0.1.0
+  version: 0.1.1
   description: >
     Short courses, certificate checks and group training bookings for Sherehe (needs S1-S5), plus the
     staff decision on a booking. Partner calls send an X-API-Key; staff calls send a login token.
@@ -77,6 +77,13 @@ paths:
   /api/bookings:
     post:
       summary: Book group training for an event crew (S3)
+      description: >
+        Checks run in this order: the body (400), then that the course exists (404), then the
+        duplicate rule (409). A body that fails validation is always 400, even for a course that does
+        not exist. A second pending booking for the same courseId and eventName, ignoring upper and
+        lower case and surrounding spaces, is a 409; once the first booking is confirmed, declined or
+        cancelled the event can be booked again. preferredStart is read as an RFC 3339 date-time and
+        answered as UTC.
       security: [{ partnerKey: [] }]
       requestBody:
         required: true
@@ -97,6 +104,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
 
   /api/bookings/{bookingId}:
     get:
@@ -114,7 +122,10 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       summary: Replace crew size and start date of a pending booking (S5)
-      description: Sets an absolute state; sending the same body twice gives the same result.
+      description: >
+        Sets an absolute state; sending the same body twice gives the same result. Only crewSize and
+        preferredStart can change: the event and the course cannot, so sending eventName or courseId
+        is a 400. A body that fails validation is a 400 even for a booking that does not exist.
       security: [{ partnerKey: [] }]
       parameters:
         - $ref: '#/components/parameters/BookingId'
@@ -133,6 +144,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
     delete:
       summary: Cancel a pending booking (S5)
       security: [{ partnerKey: [] }]
@@ -164,6 +176,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
 
 components:
   securitySchemes:
@@ -214,6 +227,12 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
           example: { message: 'Course crs_999 not found' }
+    PayloadTooLarge:
+      description: The request body is larger than 20 KB; nothing was changed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: 'Request body must be 20 KB or less' }
     Conflict:
       description: Not allowed in the resource's current state
       content:
@@ -263,8 +282,20 @@ components:
       properties:
         courseId: { type: string, example: crs_501 }
         crewSize: { type: integer, minimum: 1, maximum: 40, example: 6 }
-        preferredStart: { type: string, format: date-time, example: '2026-11-28T08:00:00Z' }
-        eventName: { type: string, maxLength: 120, example: 'Wanjiku and Otieno wedding' }
+        preferredStart:
+          type: string
+          format: date-time
+          description: >
+            Must be in the future. An RFC 3339 date-time with a Z or an offset (2026-11-28T08:00:00Z or
+            2026-11-28T11:00:00+03:00); a date with no time, a time with no zone, or a day that does not
+            exist (30 February) is a 400. Answered as UTC with a Z and no milliseconds.
+          example: '2026-11-28T08:00:00Z'
+        eventName:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Surrounding spaces are removed before the length is checked and the name is stored.
+          example: 'Wanjiku and Otieno wedding'
 
     BookingUpdate:
       type: object
@@ -272,7 +303,11 @@ components:
       required: [crewSize, preferredStart]
       properties:
         crewSize: { type: integer, minimum: 1, maximum: 40, example: 8 }
-        preferredStart: { type: string, format: date-time, example: '2026-11-29T08:00:00Z' }
+        preferredStart:
+          type: string
+          format: date-time
+          description: Must be in the future, in the same formats as when the booking is made.
+          example: '2026-11-29T08:00:00Z'
 
     Booking:
       type: object

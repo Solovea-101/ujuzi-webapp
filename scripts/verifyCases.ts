@@ -92,6 +92,7 @@ export const CASES: readonly VerifyCase[] = [
   { operation: POST, name: 'event name of 121 characters', request: '/api/bookings', status: 400, body: { ...booking, eventName: 'x'.repeat(121) }, noNewBooking: true },
   { operation: POST, name: 'body is a list', request: '/api/bookings', status: 400, body: [], noNewBooking: true },
   { operation: POST, name: 'body is not valid JSON', request: '/api/bookings', status: 400, rawBody: '{"courseId":', noNewBooking: true },
+  { operation: POST, name: 'body over 20 KB: 413, nothing created', request: '/api/bookings', status: 413, body: { ...booking, eventName: 'x'.repeat(21_000) }, noNewBooking: true },
 
   { operation: PUT, name: 'changes crew size and start date', request: '/api/bookings/{{bookingId}}', status: 200, body: change,
     fields: { ...created, crewSize: 8, preferredStart: CHANGED_START },
@@ -107,6 +108,8 @@ export const CASES: readonly VerifyCase[] = [
     then: { operation: GET_BOOKING, request: '/api/bookings/{{bookingId}}', status: 200, fields: { crewSize: 8, preferredStart: CHANGED_START } } },
   { operation: PUT, name: 'tries to rename the event: 400, unchanged', request: '/api/bookings/{{bookingId}}', status: 400, body: { ...change, eventName: 'Other' },
     then: { operation: GET_BOOKING, request: '/api/bookings/{{bookingId}}', status: 200, fields: { eventName: 'Verify wedding', crewSize: 8 } } },
+  { operation: PUT, name: 'body over 20 KB: 413, unchanged', request: '/api/bookings/{{bookingId}}', status: 413, body: { ...change, padding: 'x'.repeat(21_000) },
+    then: { operation: GET_BOOKING, request: '/api/bookings/{{bookingId}}', status: 200, fields: { crewSize: 8, preferredStart: CHANGED_START } } },
   { operation: PUT, name: 'unknown booking', request: '/api/bookings/bkg_9999', status: 404, body: change },
   { operation: PUT, name: 'confirmed booking: 409, unchanged', request: '/api/bookings/bkg_6002', status: 409, body: change,
     then: { operation: GET_BOOKING, request: '/api/bookings/bkg_6002', status: 200, fields: { status: 'confirmed', crewSize: 10, preferredStart: '2026-12-12T08:00:00Z' } } },

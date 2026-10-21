@@ -136,7 +136,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Book group training for an event crew (S3) */
+        /**
+         * Book group training for an event crew (S3)
+         * @description Checks run in this order: the body (400), then that the course exists (404), then the duplicate rule (409). A body that fails validation is always 400, even for a course that does not exist. A second pending booking for the same courseId and eventName, ignoring upper and lower case and surrounding spaces, is a 409; once the first booking is confirmed, declined or cancelled the event can be booked again. preferredStart is read as an RFC 3339 date-time and answered as UTC.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -165,6 +168,7 @@ export interface paths {
                 401: components["responses"]["Unauthorized"];
                 404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
+                413: components["responses"]["PayloadTooLarge"];
             };
         };
         delete?: never;
@@ -207,7 +211,7 @@ export interface paths {
         };
         /**
          * Replace crew size and start date of a pending booking (S5)
-         * @description Sets an absolute state; sending the same body twice gives the same result.
+         * @description Sets an absolute state; sending the same body twice gives the same result. Only crewSize and preferredStart can change: the event and the course cannot, so sending eventName or courseId is a 400. A body that fails validation is a 400 even for a booking that does not exist.
          */
         put: {
             parameters: {
@@ -237,6 +241,7 @@ export interface paths {
                 401: components["responses"]["Unauthorized"];
                 404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
+                413: components["responses"]["PayloadTooLarge"];
             };
         };
         post?: never;
@@ -296,6 +301,7 @@ export interface paths {
                 403: components["responses"]["Forbidden"];
                 404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
+                413: components["responses"]["PayloadTooLarge"];
             };
         };
         trace?: never;
@@ -375,10 +381,14 @@ export interface components {
             crewSize: number;
             /**
              * Format: date-time
+             * @description Must be in the future. An RFC 3339 date-time with a Z or an offset (2026-11-28T08:00:00Z or 2026-11-28T11:00:00+03:00); a date with no time, a time with no zone, or a day that does not exist (30 February) is a 400. Answered as UTC with a Z and no milliseconds.
              * @example 2026-11-28T08:00:00Z
              */
             preferredStart: string;
-            /** @example Wanjiku and Otieno wedding */
+            /**
+             * @description Surrounding spaces are removed before the length is checked and the name is stored.
+             * @example Wanjiku and Otieno wedding
+             */
             eventName: string;
         };
         BookingUpdate: {
@@ -386,6 +396,7 @@ export interface components {
             crewSize: number;
             /**
              * Format: date-time
+             * @description Must be in the future, in the same formats as when the booking is made.
              * @example 2026-11-29T08:00:00Z
              */
             preferredStart: string;
@@ -480,6 +491,20 @@ export interface components {
                 /**
                  * @example {
                  *       "message": "Course crs_999 not found"
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The request body is larger than 20 KB; nothing was changed */
+        PayloadTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "message": "Request body must be 20 KB or less"
                  *     }
                  */
                 "application/json": components["schemas"]["Error"];
