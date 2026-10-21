@@ -1,0 +1,44 @@
+{
+  "name": "ujuzi-webapp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ujuzi: skills training for Kenyan youth. One Next.js app serves the website and the graded API.",
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "dev": "tsx watch server.ts",
+    "build": "next build",
+    "start": "NODE_ENV=production tsx server.ts",
+    "typecheck": "tsc --noEmit",
+    "types": "openapi-typescript openapi.yaml -o types/api.d.ts && openapi-typescript partner-tests/kazi_openapi.yaml -o types/kazi.d.ts",
+    "verify": "next build && NODE_ENV=production tsx scripts/verifyContract.ts",
+    "test": "next build && jest --runInBand",
+    "db:migrate": "tsx lib/db/migrate.ts"
+  },
+  "dependencies": {
+    "@next/env": "^16.4.2",
+    "next": "^16.4.2",
+    "pg": "^8.23.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/supertest": "^7.2.1",
+    "@types/ws": "^8.18.2",
+    "jest": "^30.5.2",
+    "openapi-typescript": "^7.13.0",
+    "supertest": "^7.3.1",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "yaml": "^2.9.1"
+  }
+}

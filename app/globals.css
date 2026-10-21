@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+/* Placeholder palette: the team confirms the real brand colours. */
+@theme {
+  --color-brand-50: #ecfdf3;
+  --color-brand-100: #d1fadf;
+  --color-brand-500: #12b76a;
+  --color-brand-600: #039855;
+  --color-brand-700: #027a48;
+  --color-brand-900: #054f31;
+  --color-ink: #101828;
+  --color-sand: #fdf6e3;
+}
