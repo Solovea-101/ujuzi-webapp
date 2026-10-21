@@ -34,6 +34,16 @@ What changed: a `413` response (body over 20 KB, `{ "message": "Request body mus
 Why the original did not hold up: the API already returned 413, and already applied these rules, but a partner reading the contract could not have known: the 413 would have been an undocumented response and the 409 an unexplained one.
 Flagged to Sherehe: TODO. The team tells Sherehe's sub-team before this is deployed (R8). Nothing is deployed yet.
 
+## After handoff: version 0.2.0
+
+**Endpoints 8 to 23, the website endpoints (G1 to G5), added to the contract**
+What changed: 16 operations are added, exactly the website rows of ENDPOINT_LIST.md: register, login, logout, me; enrol and list enrolments; job matches; apply, list, reschedule and withdraw Kazi applications; the applications WebSocket feed; staff create and replace a course; staff issue a certificate; staff list bookings. They come with 15 new schemas, a `userToken` security scheme, and new shared responses (`LoginRequired`, `InvalidLogin`, `BadGateway`, `UpgradeRequired`, `UnauthorizedEither`). `info.version` goes from 0.1.1 to 0.2.0, and the "TODO Week 4" line in the file header is gone.
+Changes to what Sherehe already uses (all additive; no field, status code or behaviour of Endpoints 1 to 7 changes): `GET /api/courses`, `GET /api/courses/{courseId}` and `GET /api/certificates/{certificateNo}` now accept a partner key **or** a login token, because the website's browser pages cannot hold a partner key. Their 401 is described as "neither a partner key nor a login token". The `Unauthorized` response now says "partner key" only, `Forbidden` is described for all roles, and the `partnerKey` description no longer says "from Week 9". `PATCH /api/bookings/{bookingId}` (Endpoint 24) gains a description (only staff at the booking's centre; only a pending booking).
+Why the original did not hold up: 0.1.x documented only the partner side, so the website's own endpoints, which CLAUDE.md and ENDPOINT_LIST.md list, had no contract to build or verify against.
+Flagged to Sherehe: TODO. Nothing in 0.2.0 changes what Sherehe calls, but R8 says the team tells Sherehe's sub-team before any contract change is deployed. Nothing is deployed yet.
+
+Design choices made in the new endpoints (the team to confirm): staff accounts cannot be self-registered without the deployment's invite code (when none is configured, staff sign-up is closed); the WebSocket feed authenticates with a first message `{"type":"auth","token":...}` instead of a token in the URL; a withdrawn Kazi application stays in the graduate's list with status `cancelled`; `POST /api/courses` creates the course at the staff member's own centre.
+
 TODO (the team): confirm whether `openapi.yaml` 0.1.0 had been handed off to Sherehe. If it had, the entry above is the record of the change; if not, this section can be folded into the original contract.
 
 ## Entry format
