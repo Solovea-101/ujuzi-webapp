@@ -8,6 +8,13 @@
  * `{{name}}` puts it into a later request. A write is only believed once it is re-fetched: `then`
  * sends a GET afterwards, to show a change took effect or that a rejected write changed nothing.
  */
+/**
+ * Who a request is sent as. By default, the first way in that the contract lists for the operation
+ * (a partner key for the partner endpoints). 'none' sends no credentials; 'wrongKey' sends a key we
+ * never issued.
+ */
+export type Auth = 'partner' | 'none' | 'wrongKey';
+
 export interface VerifyCase {
   /** "METHOD /path" as written in openapi.yaml, e.g. "GET /api/courses/{courseId}". */
   operation: string;
@@ -15,6 +22,8 @@ export interface VerifyCase {
   /** Path and query, e.g. /api/courses?category=catering. May contain {{name}} placeholders. */
   request: string;
   status: number;
+  /** Who the request is sent as; see Auth. */
+  as?: Auth;
   /** Sent as JSON. */
   body?: unknown;
   /** Sent exactly as written, for a body that is not valid JSON. */
@@ -32,6 +41,7 @@ export interface VerifyCase {
     operation: string;
     request: string;
     status: number;
+    as?: Auth;
     fields?: Record<string, unknown>;
     /** The follow-up's body must equal this case's answer exactly. */
     sameAsAnswer?: boolean;
@@ -120,4 +130,18 @@ export const CASES: readonly VerifyCase[] = [
   { operation: DELETE, name: 'cancels a pending booking: 204, then it is gone', request: '/api/bookings/{{bookingId}}', status: 204,
     then: { operation: GET_BOOKING, request: '/api/bookings/{{bookingId}}', status: 404 } },
   { operation: DELETE, name: 'cancelling it again: 404', request: '/api/bookings/{{bookingId}}', status: 404 },
+
+  // ---- Partner keys (R4). A refused request must change nothing, so each write is followed by a re-fetch.
+  { operation: 'GET /api/courses', name: 'no key: 401', request: '/api/courses', status: 401, as: 'none' },
+  { operation: 'GET /api/courses', name: 'a key we never issued: 401', request: '/api/courses', status: 401, as: 'wrongKey' },
+  { operation: 'GET /api/courses/{courseId}', name: 'no key: 401', request: '/api/courses/crs_501', status: 401, as: 'none' },
+  { operation: 'GET /api/certificates/{certificateNo}', name: 'no key: 401', request: '/api/certificates/UJZ-2026-00123', status: 401, as: 'none' },
+  { operation: GET_BOOKING, name: 'no key: 401', request: '/api/bookings/bkg_6001', status: 401, as: 'none' },
+  { operation: POST, name: 'no key: 401, nothing created', request: '/api/bookings', status: 401, as: 'none', body: booking, noNewBooking: true },
+  { operation: POST, name: 'a key we never issued: 401, nothing created', request: '/api/bookings', status: 401, as: 'wrongKey', body: booking, noNewBooking: true },
+  { operation: POST, name: 'no key and a body that is not JSON: 401, not 400', request: '/api/bookings', status: 401, as: 'none', rawBody: '{"courseId":', noNewBooking: true },
+  { operation: PUT, name: 'no key: 401, unchanged', request: '/api/bookings/bkg_6001', status: 401, as: 'none', body: change,
+    then: { operation: GET_BOOKING, request: '/api/bookings/bkg_6001', status: 200, fields: { status: 'pending', crewSize: 6, preferredStart: '2026-11-28T08:00:00Z' } } },
+  { operation: DELETE, name: 'no key: 401, still there', request: '/api/bookings/bkg_6001', status: 401, as: 'none',
+    then: { operation: GET_BOOKING, request: '/api/bookings/bkg_6001', status: 200, fields: { status: 'pending' } } },
 ];

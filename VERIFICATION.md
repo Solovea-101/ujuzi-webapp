@@ -8,7 +8,7 @@ The script starts the server with the in-memory store, sends real requests to ev
 
 - Contract: `openapi.yaml` version 0.2.0 (OpenAPI 3.0.3).
 - Operations: 7 of 24 built, 17 not built yet.
-- Cases: 47 sent, 47 passed, 0 failed.
+- Cases: 57 sent, 57 passed, 0 failed.
 - Result: **PASS**
 
 "Fields checked" counts every field in the answer that was compared with the contract for its exact name, type, allowed values and format. Dates must be UTC with a Z and no milliseconds. A field the contract does not declare, or a declared field that is missing, fails the case.
@@ -64,6 +64,16 @@ The script starts the server with the in-memory store, sends real requests to ev
 | `DELETE /api/bookings/{bookingId}` | unknown booking | `/api/bookings/bkg_9999` | 404 | 404 | 1 |  | pass |
 | `DELETE /api/bookings/{bookingId}` | cancels a pending booking: 204, then it is gone | `/api/bookings/bkg_6003` | 204 | 204 | 0 | `GET /api/bookings/bkg_6003 -> 404` | pass |
 | `DELETE /api/bookings/{bookingId}` | cancelling it again: 404 | `/api/bookings/bkg_6003` | 404 | 404 | 1 |  | pass |
+| `GET /api/courses` | no key: 401 | `/api/courses` | 401 | 401 | 1 |  | pass |
+| `GET /api/courses` | a key we never issued: 401 | `/api/courses` | 401 | 401 | 1 |  | pass |
+| `GET /api/courses/{courseId}` | no key: 401 | `/api/courses/crs_501` | 401 | 401 | 1 |  | pass |
+| `GET /api/certificates/{certificateNo}` | no key: 401 | `/api/certificates/UJZ-2026-00123` | 401 | 401 | 1 |  | pass |
+| `GET /api/bookings/{bookingId}` | no key: 401 | `/api/bookings/bkg_6001` | 401 | 401 | 1 |  | pass |
+| `POST /api/bookings` | no key: 401, nothing created | `/api/bookings` | 401 | 401 | 1 |  | pass |
+| `POST /api/bookings` | a key we never issued: 401, nothing created | `/api/bookings` | 401 | 401 | 1 |  | pass |
+| `POST /api/bookings` | no key and a body that is not JSON: 401, not 400 | `/api/bookings` | 401 | 401 | 1 |  | pass |
+| `PUT /api/bookings/{bookingId}` | no key: 401, unchanged | `/api/bookings/bkg_6001` | 401 | 401 | 1 | `GET /api/bookings/bkg_6001 -> 200` | pass |
+| `DELETE /api/bookings/{bookingId}` | no key: 401, still there | `/api/bookings/bkg_6001` | 401 | 401 | 1 | `GET /api/bookings/bkg_6001 -> 200` | pass |
 
 ## Not built yet
 

@@ -6,7 +6,8 @@ import path from 'node:path';
 import Ajv, { type ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
 import { parse } from 'yaml';
-import { CASES, type VerifyCase } from './verifyCases';
+import { hashKey } from '../lib/auth/partnerKey';
+import { CASES, type Auth, type VerifyCase } from './verifyCases';
 
 /**
  * `npm run verify`: checks the running app against openapi.yaml and writes VERIFICATION.md.
@@ -25,6 +26,7 @@ import { CASES, type VerifyCase } from './verifyCases';
 const ROOT = path.resolve(__dirname, '..');
 const CONTRACT = 'openapi.yaml';
 const REPORT = 'VERIFICATION.md';
+const VERIFY_PARTNER_KEY = 'ujz_verify_run_key_never_used_anywhere_else';
 const TYPE_FILES: ReadonlyArray<{ yaml: string; types: string }> = [
   { yaml: 'openapi.yaml', types: 'types/api.d.ts' },
   { yaml: 'partner-tests/kazi_openapi.yaml', types: 'types/kazi.d.ts' },
@@ -48,6 +50,8 @@ export interface Operation {
   probeUrl: string;
   /** Status codes the contract documents for this operation. */
   statuses: string[];
+  /** The contract's security alternatives, each as the names of the schemes it needs: [['partnerKey'], ['userToken']]. */
+  security: string[][];
   responses: Json;
 }
 
@@ -118,7 +122,8 @@ export function parseContract(text: string): Contract {
         return encodeURIComponent(example);
       });
       const probeUrl = template.replace(/\{[^}]+\}/g, 'verify-probe');
-      operations.push({ method, template, key, url, probeUrl, statuses: Object.keys(op.responses), responses: op.responses });
+      const security = Array.isArray(op.security) ? op.security.map((alternative) => (isObject(alternative) ? Object.keys(alternative) : [])) : [];
+      operations.push({ method, template, key, url, probeUrl, statuses: Object.keys(op.responses), security, responses: op.responses });
     }
   }
   if (operations.length === 0) throw new Error('paths has no operations');
@@ -264,6 +269,19 @@ interface RunContext {
   /** Values captured from earlier answers, for {{placeholders}}. */
   vars: Map<string, string>;
   countBookings: () => Promise<number>;
+  /** The partner key verify configured the server with. */
+  partnerKey: string;
+}
+
+/** Who a request is sent as when a case does not say: the first way in that the contract lists. */
+export function defaultAuth(operation: Operation): Auth {
+  return operation.security[0]?.[0] === 'partnerKey' ? 'partner' : 'none';
+}
+
+function authHeaders(auth: Auth, ctx: RunContext): Record<string, string> {
+  if (auth === 'partner') return { 'X-API-Key': ctx.partnerKey };
+  if (auth === 'wrongKey') return { 'X-API-Key': 'not-the-partner-key' };
+  return {};
 }
 
 interface Exchange {
@@ -281,10 +299,11 @@ async function exchange(
   request: string,
   expected: number,
   sent: string | undefined,
+  auth: Auth,
 ): Promise<Exchange> {
   const res = await fetch(ctx.baseUrl + request, {
     method: operation.method.toUpperCase(),
-    headers: sent !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    headers: { ...(sent !== undefined ? { 'Content-Type': 'application/json' } : {}), ...authHeaders(auth, ctx) },
     body: sent,
   });
   const out: Exchange = { status: res.status, body: undefined, headers: res.headers, fields: 0, problems: [] };
@@ -345,7 +364,7 @@ async function runCase(ctx: RunContext, operation: Operation, c: VerifyCase): Pr
 
   const sent = c.rawBody ?? (c.body !== undefined ? JSON.stringify(c.body) : undefined);
   const bookingsBefore = c.noNewBooking ? await ctx.countBookings() : undefined;
-  const main = await exchange(ctx, operation, filled.text, c.status, sent);
+  const main = await exchange(ctx, operation, filled.text, c.status, sent, c.as ?? defaultAuth(operation));
   result.got = main.status;
   result.fields = main.fields;
   result.problems.push(...main.problems);
@@ -373,7 +392,7 @@ async function runCase(ctx: RunContext, operation: Operation, c: VerifyCase): Pr
     } else if (next.missing.length > 0) {
       result.problems.push(`then: no value for {{${next.missing.join('}}, {{')}}}`);
     } else {
-      const again = await exchange(ctx, followUp, next.text, c.then.status, undefined);
+      const again = await exchange(ctx, followUp, next.text, c.then.status, undefined, c.then.as ?? defaultAuth(followUp));
       result.then = `${followUp.method.toUpperCase()} ${next.text} -> ${again.status}`;
       result.problems.push(...again.problems.map((p) => `then: ${p}`));
       if (c.then.fields) result.problems.push(...fieldProblems(again.body, c.then.fields).map((p) => `then: ${p}`));
@@ -473,6 +492,8 @@ async function main(): Promise<number> {
     process.env.DATABASE_URL = '';
     process.env.KAZI_API_URL = 'http://127.0.0.1:9';
     process.env.KAZI_WS_URL = 'ws://127.0.0.1:9';
+    // Only the hash of this key is configured, exactly as in production.
+    process.env.PARTNER_KEYS = hashKey(VERIFY_PARTNER_KEY);
     const { createServer } = await import('../server');
     const { getStore } = await import('../lib/db');
     const server = createServer();
@@ -488,6 +509,7 @@ async function main(): Promise<number> {
         contract,
         operations: new Map(contract.operations.map((o) => [o.key, o])),
         vars: new Map(),
+        partnerKey: VERIFY_PARTNER_KEY,
         // The server runs in this process and shares its store, so a rejected POST can be shown to have created nothing.
         countBookings: async () => {
           const store = await getStore();

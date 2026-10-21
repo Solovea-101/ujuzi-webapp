@@ -1,10 +1,17 @@
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import request from 'supertest';
+import { hashKey } from '@/lib/auth/partnerKey';
 import { createServer } from '@/server';
 
 // Tests must never pick up a developer's .env database. Next does not override variables that are
 // already set, so an empty value wins over the one in .env.
 process.env.DATABASE_URL = '';
+
+// The partner key every test sends. Only its hash is configured, exactly as in production.
+export const PARTNER_KEY = 'ujz_test_key_for_the_test_suite_only';
+export const OTHER_PARTNER_KEY = 'ujz_a_second_partner_key_for_tests';
+process.env.PARTNER_KEYS = [hashKey(PARTNER_KEY), hashKey(OTHER_PARTNER_KEY)].join(',');
 
 // Next's own flag for running inside Jest (see loadConfig in next/dist/server/config.js): it then
 // loads next.config.ts with require() instead of its TypeScript loader. Without it, `prepare()`
@@ -21,4 +28,9 @@ export async function startServer(): Promise<TestServer> {
   const close = () =>
     new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   return { server, port, close };
+}
+
+/** Requests that already carry the partner key: partner(app).get('/api/courses'). */
+export function partner(app: TestServer) {
+  return request.agent(app.server).set('X-API-Key', PARTNER_KEY);
 }

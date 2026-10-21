@@ -1,6 +1,5 @@
-import request from 'supertest';
 import { getStore, resetStore } from '@/lib/db';
-import { startServer, type TestServer } from './helpers/server';
+import { partner, startServer, type TestServer } from './helpers/server';
 import { expectErrorBody, expectKeys, inDays, ISO_SECONDS } from './helpers/shapes';
 
 let app: TestServer;
@@ -24,7 +23,7 @@ function expectBookingShape(booking: Record<string, unknown>) {
 
 describe('GET /api/bookings/{bookingId}', () => {
   it('returns the pending booking from the contract example', async () => {
-    const res = await request(app.server).get('/api/bookings/bkg_6001');
+    const res = await partner(app).get('/api/bookings/bkg_6001');
     expect(res.status).toBe(200);
     expectBookingShape(res.body);
     expect(res.body).toMatchObject({
@@ -38,14 +37,14 @@ describe('GET /api/bookings/{bookingId}', () => {
   });
 
   it('returns a confirmed booking with its status', async () => {
-    const res = await request(app.server).get('/api/bookings/bkg_6002');
+    const res = await partner(app).get('/api/bookings/bkg_6002');
     expect(res.status).toBe(200);
     expectBookingShape(res.body);
     expect(res.body.status).toBe('confirmed');
   });
 
   it('answers 404 { message } for an unknown id', async () => {
-    const res = await request(app.server).get('/api/bookings/bkg_9999');
+    const res = await partner(app).get('/api/bookings/bkg_9999');
     expect(res.status).toBe(404);
     expectErrorBody(res.body, 'Booking bkg_9999 not found');
   });
@@ -60,12 +59,12 @@ const newBooking = (over: Record<string, unknown> = {}) => ({
 });
 
 const create = async (over: Record<string, unknown> = {}) => {
-  const res = await request(app.server).post('/api/bookings').send(newBooking(over));
+  const res = await partner(app).post('/api/bookings').send(newBooking(over));
   expect(res.status).toBe(201);
   return res.body as { id: string; crewSize: number; preferredStart: string };
 };
 
-const get = (id: string) => request(app.server).get(`/api/bookings/${id}`);
+const get = (id: string) => partner(app).get(`/api/bookings/${id}`);
 
 describe('test isolation', () => {
   it('shares one store with the server, and resetStore() gives the next test the seed data again', async () => {
@@ -81,7 +80,7 @@ describe('test isolation', () => {
 describe('POST /api/bookings', () => {
   it('creates a pending booking: 201, the booking, and a Location header', async () => {
     const start = inDays(30);
-    const res = await request(app.server).post('/api/bookings').send(newBooking({ preferredStart: start }));
+    const res = await partner(app).post('/api/bookings').send(newBooking({ preferredStart: start }));
     expect(res.status).toBe(201);
     expectBookingShape(res.body);
     expect(res.body).toMatchObject({
@@ -103,13 +102,13 @@ describe('POST /api/bookings', () => {
   });
 
   it('ignores any status, id or createdAt in the body: a new booking is always pending', async () => {
-    const res = await request(app.server).post('/api/bookings').send(newBooking({ status: 'confirmed' }));
+    const res = await partner(app).post('/api/bookings').send(newBooking({ status: 'confirmed' }));
     expect(res.status).toBe(400);
     expectErrorBody(res.body, 'Unknown field(s): status');
   });
 
   it('trims the event name and turns an offset into UTC with a Z and no milliseconds', async () => {
-    const res = await request(app.server)
+    const res = await partner(app)
       .post('/api/bookings')
       .send(newBooking({ eventName: '  Wedding  ', preferredStart: '2031-05-04T11:30:00.750+03:00' }));
     expect(res.status).toBe(201);
@@ -134,7 +133,7 @@ describe('POST /api/bookings', () => {
     ['a 121-character event name', newBooking({ eventName: 'x'.repeat(121) }), 'eventName must be 1 to 120 characters'],
     ['a courseId that is a number', newBooking({ courseId: 501 }), /^courseId must be a text id/],
   ])('answers 400 { message } and creates nothing for %s', async (_name, body, message) => {
-    const res = body === undefined ? await request(app.server).post('/api/bookings') : await request(app.server).post('/api/bookings').send(body);
+    const res = body === undefined ? await partner(app).post('/api/bookings') : await partner(app).post('/api/bookings').send(body);
     expect(res.status).toBe(400);
     expectErrorBody(res.body, message);
     expect((await get('bkg_6003')).status).toBe(404);
@@ -146,34 +145,34 @@ describe('POST /api/bookings', () => {
     ['JSON null', 'null', 'Request body must be a JSON object'],
     ['plain text', '"booking"', 'Request body must be a JSON object'],
   ])('answers 400 for %s', async (_name, raw, message) => {
-    const res = await request(app.server).post('/api/bookings').set('Content-Type', 'application/json').send(raw);
+    const res = await partner(app).post('/api/bookings').set('Content-Type', 'application/json').send(raw);
     expect(res.status).toBe(400);
     expectErrorBody(res.body, message);
   });
 
   it('answers 413 for a body over 20 KB, and creates nothing', async () => {
-    const res = await request(app.server).post('/api/bookings').send(newBooking({ eventName: 'x'.repeat(21_000) }));
+    const res = await partner(app).post('/api/bookings').send(newBooking({ eventName: 'x'.repeat(21_000) }));
     expect(res.status).toBe(413);
     expectErrorBody(res.body, 'Request body must be 20 KB or less');
     expect((await get('bkg_6003')).status).toBe(404);
   });
 
   it('answers 404 for a course that does not exist, and creates nothing', async () => {
-    const res = await request(app.server).post('/api/bookings').send(newBooking({ courseId: 'crs_999' }));
+    const res = await partner(app).post('/api/bookings').send(newBooking({ courseId: 'crs_999' }));
     expect(res.status).toBe(404);
     expectErrorBody(res.body, 'Course crs_999 not found');
     expect((await get('bkg_6003')).status).toBe(404);
   });
 
   it('checks the body before the course: a bad body for an unknown course is 400, not 404', async () => {
-    const res = await request(app.server).post('/api/bookings').send(newBooking({ courseId: 'crs_999', crewSize: 0 }));
+    const res = await partner(app).post('/api/bookings').send(newBooking({ courseId: 'crs_999', crewSize: 0 }));
     expect(res.status).toBe(400);
   });
 
   it('answers 409 for a second pending booking of the same event, ignoring case, and creates nothing', async () => {
     await create();
     for (const eventName of ['Kamau family reunion', 'KAMAU FAMILY REUNION', '  kamau family reunion ']) {
-      const res = await request(app.server).post('/api/bookings').send(newBooking({ eventName }));
+      const res = await partner(app).post('/api/bookings').send(newBooking({ eventName }));
       expect(res.status).toBe(409);
       // The message repeats the event name the client sent (trimmed), not the stored spelling.
       expectErrorBody(res.body, `A pending booking named "${eventName.trim()}" already exists for course crs_501`);
@@ -182,22 +181,22 @@ describe('POST /api/bookings', () => {
   });
 
   it('answers 409 for the seeded pending booking too, and allows the event on another course', async () => {
-    const dup = await request(app.server).post('/api/bookings').send(newBooking({ eventName: 'Wanjiku and Otieno wedding' }));
+    const dup = await partner(app).post('/api/bookings').send(newBooking({ eventName: 'Wanjiku and Otieno wedding' }));
     expect(dup.status).toBe(409);
-    const other = await request(app.server).post('/api/bookings').send(newBooking({ courseId: 'crs_502', eventName: 'Wanjiku and Otieno wedding' }));
+    const other = await partner(app).post('/api/bookings').send(newBooking({ courseId: 'crs_502', eventName: 'Wanjiku and Otieno wedding' }));
     expect(other.status).toBe(201);
   });
 
   it('allows the event again once the first booking is cancelled', async () => {
     const first = await create();
-    expect((await request(app.server).delete(`/api/bookings/${first.id}`)).status).toBe(204);
-    expect((await request(app.server).post('/api/bookings').send(newBooking())).status).toBe(201);
+    expect((await partner(app).delete(`/api/bookings/${first.id}`)).status).toBe(204);
+    expect((await partner(app).post('/api/bookings').send(newBooking())).status).toBe(201);
   });
 
   it('answers two simultaneous identical requests with one 201 and one 409', async () => {
     const [a, b] = await Promise.all([
-      request(app.server).post('/api/bookings').send(newBooking({ eventName: 'Race' })),
-      request(app.server).post('/api/bookings').send(newBooking({ eventName: 'Race' })),
+      partner(app).post('/api/bookings').send(newBooking({ eventName: 'Race' })),
+      partner(app).post('/api/bookings').send(newBooking({ eventName: 'Race' })),
     ]);
     expect([a.status, b.status].sort()).toEqual([201, 409]);
   });
@@ -205,7 +204,7 @@ describe('POST /api/bookings', () => {
 
 describe('PUT /api/bookings/{bookingId}', () => {
   const change = (over: Record<string, unknown> = {}) => ({ crewSize: 8, preferredStart: inDays(31), ...over });
-  const put = (id: string, body: unknown) => request(app.server).put(`/api/bookings/${id}`).send(body as object);
+  const put = (id: string, body: unknown) => partner(app).put(`/api/bookings/${id}`).send(body as object);
 
   it('replaces crew size and start date and answers the updated booking', async () => {
     const created = await create();
@@ -245,7 +244,7 @@ describe('PUT /api/bookings/{bookingId}', () => {
 
   it('answers 400 for malformed JSON and 413 for an oversized body, changing nothing', async () => {
     const created = await create();
-    const bad = await request(app.server).put(`/api/bookings/${created.id}`).set('Content-Type', 'application/json').send('{"crewSize":');
+    const bad = await partner(app).put(`/api/bookings/${created.id}`).set('Content-Type', 'application/json').send('{"crewSize":');
     expect(bad.status).toBe(400);
     const big = await put(created.id, change({ padding: 'x'.repeat(21_000) }));
     expect(big.status).toBe(413);
@@ -280,7 +279,7 @@ describe('PUT /api/bookings/{bookingId}', () => {
 });
 
 describe('DELETE /api/bookings/{bookingId}', () => {
-  const del = (id: string) => request(app.server).delete(`/api/bookings/${id}`);
+  const del = (id: string) => partner(app).delete(`/api/bookings/${id}`);
 
   it('cancels a pending booking: 204 with no body, and it no longer exists', async () => {
     const created = await create();
