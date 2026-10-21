@@ -1,4 +1,5 @@
 import { loadEnvConfig } from '@next/env';
+import { hashPassword } from '../auth/passwords';
 import type { CertificateLevel, Category, Store } from './types';
 
 /**
@@ -8,8 +9,16 @@ import type { CertificateLevel, Category, Store } from './types';
  * grd_0101, usr_0001, enr_0001 and bkg_6001, the examples in openapi.yaml.
  */
 
-/** Seeded accounts cannot log in yet: this is not a valid password hash, so nothing verifies against it. */
-export const SEED_PASSWORD_HASH = '!';
+/**
+ * Every seeded account (the fictional graduates and staff below) logs in with this password, unless
+ * SEED_PASSWORD is set. It is public demo data: set SEED_PASSWORD on any deployment other people can reach.
+ */
+export const DEMO_PASSWORD = 'ujuzi-demo-pass';
+
+let demoHash: Promise<string> | undefined;
+
+/** One hash for all the demo accounts, made once per process: scrypt is slow on purpose. */
+const seedPasswordHash = () => (demoHash ??= hashPassword(process.env.SEED_PASSWORD || DEMO_PASSWORD));
 
 const centres = [
   { name: 'Westlands Skills Centre', county: 'Nairobi', area: 'Westlands' },
@@ -40,9 +49,13 @@ const graduates = [
   { first: 'Mwanaisha', last: 'Juma', email: 'mwanaisha.juma@example.com' },
 ];
 
+// One staff member per centre, so a booking for any seeded course can be decided.
 const staff = [
   { first: 'Wanjiru', last: 'Njeri', email: 'wanjiru.njeri@example.com', centre: 0 },
   { first: 'Peter', last: 'Mwangi', email: 'peter.mwangi@example.com', centre: 1 },
+  { first: 'Grace', last: 'Wambui', email: 'grace.wambui@example.com', centre: 2 },
+  { first: 'Joseph', last: 'Kiprop', email: 'joseph.kiprop@example.com', centre: 3 },
+  { first: 'Fatuma', last: 'Hassan', email: 'fatuma.hassan@example.com', centre: 4 },
 ];
 
 /** Fills an empty store with the sample data. Returns false, changing nothing, if it already has centres. */
@@ -67,7 +80,7 @@ export async function seedStore(store: Store): Promise<boolean> {
     );
   }
 
-  const person = { password_hash: SEED_PASSWORD_HASH };
+  const person = { password_hash: await seedPasswordHash() };
   const graduateRows = [];
   for (const g of graduates) {
     graduateRows.push(

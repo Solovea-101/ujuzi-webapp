@@ -7,8 +7,8 @@ The script starts the server with the in-memory store, sends real requests to ev
 ## Latest run
 
 - Contract: `openapi.yaml` version 0.2.0 (OpenAPI 3.0.3).
-- Operations: 7 of 24 built, 17 not built yet.
-- Cases: 57 sent, 57 passed, 0 failed.
+- Operations: 18 of 24 built, 6 not built yet.
+- Cases: 127 sent, 127 passed, 0 failed.
 - Result: **PASS**
 
 "Fields checked" counts every field in the answer that was compared with the contract for its exact name, type, allowed values and format. Dates must be UTC with a Z and no milliseconds. A field the contract does not declare, or a declared field that is missing, fails the case.
@@ -74,21 +74,80 @@ The script starts the server with the in-memory store, sends real requests to ev
 | `POST /api/bookings` | no key and a body that is not JSON: 401, not 400 | `/api/bookings` | 401 | 401 | 1 |  | pass |
 | `PUT /api/bookings/{bookingId}` | no key: 401, unchanged | `/api/bookings/bkg_6001` | 401 | 401 | 1 | `GET /api/bookings/bkg_6001 -> 200` | pass |
 | `DELETE /api/bookings/{bookingId}` | no key: 401, still there | `/api/bookings/bkg_6001` | 401 | 401 | 1 | `GET /api/bookings/bkg_6001 -> 200` | pass |
+| `POST /api/auth/register` | creates a graduate account and logs it in | `/api/auth/register` | 201 | 201 | 9 | `GET /api/me -> 200` | pass |
+| `POST /api/auth/register` | the same email again, in another case: 409 | `/api/auth/register` | 409 | 409 | 1 |  | pass |
+| `POST /api/auth/register` | staff sign-up with no invite code configured: 403, nothing created | `/api/auth/register` | 403 | 403 | 1 |  | pass |
+| `POST /api/auth/register` | no fields: 400 | `/api/auth/register` | 400 | 400 | 1 |  | pass |
+| `POST /api/auth/register` | password of 7 characters: 400, nothing created | `/api/auth/register` | 400 | 400 | 1 |  | pass |
+| `POST /api/auth/register` | unknown role: 400 | `/api/auth/register` | 400 | 400 | 1 |  | pass |
+| `POST /api/auth/register` | a graduate with a centreId: 400, nothing created | `/api/auth/register` | 400 | 400 | 1 |  | pass |
+| `POST /api/auth/register` | body over 20 KB: 413 | `/api/auth/register` | 413 | 413 | 1 |  | pass |
+| `POST /api/auth/login` | the seeded demo password | `/api/auth/login` | 200 | 200 | 9 | `GET /api/me -> 200` | pass |
+| `POST /api/auth/login` | a wrong password: 401 | `/api/auth/login` | 401 | 401 | 1 |  | pass |
+| `POST /api/auth/login` | an email with no account: 401 | `/api/auth/login` | 401 | 401 | 1 |  | pass |
+| `POST /api/auth/login` | no fields: 400 | `/api/auth/login` | 400 | 400 | 1 |  | pass |
+| `POST /api/auth/login` | body is not valid JSON: 400 | `/api/auth/login` | 400 | 400 | 1 |  | pass |
+| `POST /api/auth/login` | body over 20 KB: 413 | `/api/auth/login` | 413 | 413 | 1 |  | pass |
+| `GET /api/me` | a graduate | `/api/me` | 200 | 200 | 6 |  | pass |
+| `GET /api/me` | a staff member | `/api/me` | 200 | 200 | 6 |  | pass |
+| `GET /api/me` | no token: 401 | `/api/me` | 401 | 401 | 1 |  | pass |
+| `GET /api/me` | a token we never issued: 401 | `/api/me` | 401 | 401 | 1 |  | pass |
+| `POST /api/auth/logout` | logs out: 204, and the token stops working | `/api/auth/logout` | 204 | 204 | 0 | `GET /api/me -> 401` | pass |
+| `POST /api/auth/logout` | no token: 401 | `/api/auth/logout` | 401 | 401 | 1 |  | pass |
+| `GET /api/courses` | a login token instead of a key | `/api/courses` | 200 | 200 | 108 |  | pass |
+| `GET /api/courses` | a token we never issued: 401 | `/api/courses` | 401 | 401 | 1 |  | pass |
+| `GET /api/courses/{courseId}` | a login token instead of a key | `/api/courses/crs_501` | 200 | 200 | 12 |  | pass |
+| `GET /api/certificates/{certificateNo}` | a login token instead of a key | `/api/certificates/UJZ-2026-00123` | 200 | 200 | 6 |  | pass |
+| `POST /api/enrolments` | enrols a graduate: 201, and it is in their list | `/api/enrolments` | 201 | 201 | 5 | `GET /api/me/enrolments -> 200` | pass |
+| `POST /api/enrolments` | enrolling again: 409 | `/api/enrolments` | 409 | 409 | 1 |  | pass |
+| `POST /api/enrolments` | unknown course: 404 | `/api/enrolments` | 404 | 404 | 1 |  | pass |
+| `POST /api/enrolments` | no courseId: 400 | `/api/enrolments` | 400 | 400 | 1 |  | pass |
+| `POST /api/enrolments` | a staff member cannot enrol: 403 | `/api/enrolments` | 403 | 403 | 1 |  | pass |
+| `POST /api/enrolments` | no token: 401 | `/api/enrolments` | 401 | 401 | 1 |  | pass |
+| `POST /api/enrolments` | body over 20 KB: 413 | `/api/enrolments` | 413 | 413 | 1 |  | pass |
+| `GET /api/me/enrolments` | a graduate with a certificate | `/api/me/enrolments` | 200 | 200 | 5 | `GET /api/me -> 200` | pass |
+| `GET /api/me/enrolments` | a staff member has none to list: 403 | `/api/me/enrolments` | 403 | 403 | 1 |  | pass |
+| `GET /api/me/enrolments` | no token: 401 | `/api/me/enrolments` | 401 | 401 | 1 |  | pass |
+| `POST /api/courses` | creates a course at the staff member's centre | `/api/courses` | 201 | 201 | 12 | `GET /api/courses/crs_510 -> 200` | pass |
+| `POST /api/courses` | tries to choose the centre: 400 | `/api/courses` | 400 | 400 | 1 |  | pass |
+| `POST /api/courses` | an unknown category: 400 | `/api/courses` | 400 | 400 | 1 |  | pass |
+| `POST /api/courses` | a start in the past: 400 | `/api/courses` | 400 | 400 | 1 |  | pass |
+| `POST /api/courses` | no fields: 400 | `/api/courses` | 400 | 400 | 1 |  | pass |
+| `POST /api/courses` | a graduate cannot: 403 | `/api/courses` | 403 | 403 | 1 |  | pass |
+| `POST /api/courses` | no token: 401 | `/api/courses` | 401 | 401 | 1 |  | pass |
+| `POST /api/courses` | body over 20 KB: 413 | `/api/courses` | 413 | 413 | 1 |  | pass |
+| `PUT /api/courses/{courseId}` | replaces the details of its own centre's course | `/api/courses/crs_510` | 200 | 200 | 12 | `GET /api/courses/crs_510 -> 200` | pass |
+| `PUT /api/courses/{courseId}` | the same body again: same course (idempotent) | `/api/courses/crs_510` | 200 | 200 | 12 | `GET /api/courses/crs_510 -> 200` | pass |
+| `PUT /api/courses/{courseId}` | another centre's staff: 403, unchanged | `/api/courses/crs_510` | 403 | 403 | 1 | `GET /api/courses/crs_510 -> 200` | pass |
+| `PUT /api/courses/{courseId}` | an invalid body: 400, unchanged | `/api/courses/crs_510` | 400 | 400 | 1 | `GET /api/courses/crs_510 -> 200` | pass |
+| `PUT /api/courses/{courseId}` | unknown course: 404 | `/api/courses/crs_999` | 404 | 404 | 1 |  | pass |
+| `PUT /api/courses/{courseId}` | a graduate cannot: 403 | `/api/courses/crs_501` | 403 | 403 | 1 |  | pass |
+| `PUT /api/courses/{courseId}` | no token: 401 | `/api/courses/crs_501` | 401 | 401 | 1 |  | pass |
+| `POST /api/certificates` | another centre's staff: 403, nothing issued | `/api/certificates` | 403 | 403 | 1 |  | pass |
+| `POST /api/certificates` | issues a certificate for an enrolment at the staff member's centre | `/api/certificates` | 201 | 201 | 6 | `GET /api/certificates/UJZ-2026-00001 -> 200` | pass |
+| `POST /api/certificates` | issuing again: 409 | `/api/certificates` | 409 | 409 | 1 |  | pass |
+| `POST /api/certificates` | unknown enrolment: 404 | `/api/certificates` | 404 | 404 | 1 |  | pass |
+| `POST /api/certificates` | no enrolmentId: 400 | `/api/certificates` | 400 | 400 | 1 |  | pass |
+| `POST /api/certificates` | a graduate cannot: 403 | `/api/certificates` | 403 | 403 | 1 |  | pass |
+| `POST /api/certificates` | no token: 401 | `/api/certificates` | 401 | 401 | 1 |  | pass |
+| `POST /api/certificates` | body over 20 KB: 413 | `/api/certificates` | 413 | 413 | 1 |  | pass |
+| `GET /api/bookings` | the centre's bookings | `/api/bookings` | 200 | 200 | 14 | `GET /api/bookings/bkg_6001 -> 200` | pass |
+| `GET /api/bookings` | another centre sees none of them: [] with 200 | `/api/bookings` | 200 | 200 | 0 |  | pass |
+| `GET /api/bookings` | a graduate cannot: 403 | `/api/bookings` | 403 | 403 | 1 |  | pass |
+| `GET /api/bookings` | no token: 401 | `/api/bookings` | 401 | 401 | 1 |  | pass |
+| `PATCH /api/bookings/{bookingId}` | another centre's staff: 403, unchanged | `/api/bookings/bkg_6001` | 403 | 403 | 1 | `GET /api/bookings/bkg_6001 -> 200` | pass |
+| `PATCH /api/bookings/{bookingId}` | an invalid status: 400, unchanged | `/api/bookings/bkg_6001` | 400 | 400 | 1 | `GET /api/bookings/bkg_6001 -> 200` | pass |
+| `PATCH /api/bookings/{bookingId}` | confirms a pending booking | `/api/bookings/bkg_6001` | 200 | 200 | 7 | `GET /api/bookings/bkg_6001 -> 200` | pass |
+| `PATCH /api/bookings/{bookingId}` | deciding again: 409 | `/api/bookings/bkg_6001` | 409 | 409 | 1 | `GET /api/bookings/bkg_6001 -> 200` | pass |
+| `PATCH /api/bookings/{bookingId}` | unknown booking: 404 | `/api/bookings/bkg_9999` | 404 | 404 | 1 |  | pass |
+| `PATCH /api/bookings/{bookingId}` | a graduate cannot: 403 | `/api/bookings/bkg_6002` | 403 | 403 | 1 |  | pass |
+| `PATCH /api/bookings/{bookingId}` | no token: 401 | `/api/bookings/bkg_6002` | 401 | 401 | 1 |  | pass |
+| `PATCH /api/bookings/{bookingId}` | a partner key is not a login: 401 | `/api/bookings/bkg_6002` | 401 | 401 | 1 |  | pass |
+| `PATCH /api/bookings/{bookingId}` | body over 20 KB: 413 | `/api/bookings/bkg_6002` | 413 | 413 | 1 |  | pass |
 
 ## Not built yet
 
-- `POST /api/courses`
-- `PUT /api/courses/{courseId}`
 - `GET /api/courses/{courseId}/job-matches`
-- `POST /api/certificates`
-- `GET /api/bookings`
-- `PATCH /api/bookings/{bookingId}`
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/me`
-- `POST /api/enrolments`
-- `GET /api/me/enrolments`
 - `GET /api/me/applications`
 - `POST /api/me/applications`
 - `GET /api/me/applications/feed`

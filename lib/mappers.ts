@@ -1,11 +1,14 @@
 import type { components } from '@/types/api';
-import type { BookingRow, CertificateDetailRow, CourseDetailRow } from '@/lib/db/types';
+import type { BookingRow, CertificateDetailRow, CourseDetailRow, EnrolmentRow, UserRow } from '@/lib/db/types';
 
 // The return types come from the generated contract, so a change to openapi.yaml that these
 // mappers do not follow fails `npm run typecheck`.
 export type Course = components['schemas']['Course'];
 export type CertificateCheck = components['schemas']['CertificateCheck'];
 export type Booking = components['schemas']['Booking'];
+export type User = components['schemas']['User'];
+export type AuthResponse = components['schemas']['AuthResponse'];
+export type Enrolment = components['schemas']['Enrolment'];
 
 /** ISO 8601 UTC with a Z and no milliseconds: 2026-11-23T07:00:00Z. */
 export function isoSeconds(date: Date): string {
@@ -54,4 +57,12 @@ export function toBooking(row: BookingRow): Booking {
     status: row.status,
     createdAt: isoSeconds(row.created_at),
   };
+}
+
+export function toUser(row: UserRow): User {
+  return { id: row.id, role: row.role, email: row.email, firstName: row.first_name, lastName: row.last_name, centreId: row.centre_id };
+}
+
+export function toEnrolment(row: EnrolmentRow, courseTitle: string, certificateNo: string | null): Enrolment {
+  return { id: row.id, courseId: row.course_id, courseTitle, enrolledAt: isoSeconds(row.enrolled_at), certificateNo };
 }

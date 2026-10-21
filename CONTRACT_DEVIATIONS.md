@@ -42,6 +42,15 @@ Changes to what Sherehe already uses (all additive; no field, status code or beh
 Why the original did not hold up: 0.1.x documented only the partner side, so the website's own endpoints, which CLAUDE.md and ENDPOINT_LIST.md list, had no contract to build or verify against.
 Flagged to Sherehe: TODO. Nothing in 0.2.0 changes what Sherehe calls, but R8 says the team tells Sherehe's sub-team before any contract change is deployed. Nothing is deployed yet.
 
+**Built so far under 0.2.0:** Endpoints 8, 9, 10, 11 (accounts), 12, 13 (enrolments), 20, 21 (staff courses), 22 (staff certificates), 23 (staff booking list) and 24 (staff decision). `npm run verify` checks each one against this contract (127 cases in all, every rejected write shown to change nothing). Endpoints 14 to 19 (job matches, Kazi applications, the live feed) are not built yet; they need the Kazi client.
+
+**Rules the code applies where the contract is silent (the team to confirm):**
+- *Order of checks* on every write: login (401), then body (400, 413), then the thing it names (404), then ownership (403), then state (409). For example, a staff member of another centre gets 403 for a booking that is already decided, not 409.
+- *Accounts:* the email is lower-cased and trimmed and is unique ignoring case; the password is 8 to 128 characters with no other rule; names are 1 to 60 characters. A login token is valid for 7 days. A wrong password and an unknown email give the same 401 after the same amount of work. Logging out ends only that token. Register answers 409 for an email that is taken, which does reveal that the email has an account.
+- *Staff invite code:* trimmed before it is compared, compared in constant time, and sign-up stays closed (403) when `STAFF_INVITE_CODE` is unset or empty.
+- *Certificates* are numbered `UJZ-<current year>-NNNNN`, skipping numbers already taken, and keep the course title and level as they were the day they were issued.
+- *Not built, noted as risks:* there is no rate limit or lockout on login, and no password reset.
+
 Design choices made in the new endpoints (the team to confirm): staff accounts cannot be self-registered without the deployment's invite code (when none is configured, staff sign-up is closed); the WebSocket feed authenticates with a first message `{"type":"auth","token":...}` instead of a token in the URL; a withdrawn Kazi application stays in the graduate's list with status `cancelled`; `POST /api/courses` creates the course at the staff member's own centre.
 
 TODO (the team): confirm whether `openapi.yaml` 0.1.0 had been handed off to Sherehe. If it had, the entry above is the record of the change; if not, this section can be folded into the original contract.
