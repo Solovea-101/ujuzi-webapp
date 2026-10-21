@@ -6,8 +6,8 @@ The script starts the server with the in-memory store, sends real requests to ev
 
 ## Latest run
 
-- Contract: `openapi.yaml` version 0.1.1 (OpenAPI 3.0.3).
-- Operations: 7 of 8 built, 1 not built yet.
+- Contract: `openapi.yaml` version 0.2.0 (OpenAPI 3.0.3).
+- Operations: 7 of 24 built, 17 not built yet.
 - Cases: 47 sent, 47 passed, 0 failed.
 - Result: **PASS**
 
@@ -67,4 +67,20 @@ The script starts the server with the in-memory store, sends real requests to ev
 
 ## Not built yet
 
+- `POST /api/courses`
+- `PUT /api/courses/{courseId}`
+- `GET /api/courses/{courseId}/job-matches`
+- `POST /api/certificates`
+- `GET /api/bookings`
 - `PATCH /api/bookings/{bookingId}`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/me`
+- `POST /api/enrolments`
+- `GET /api/me/enrolments`
+- `GET /api/me/applications`
+- `POST /api/me/applications`
+- `GET /api/me/applications/feed`
+- `PUT /api/me/applications/{id}`
+- `DELETE /api/me/applications/{id}`
