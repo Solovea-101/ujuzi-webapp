@@ -14,3 +14,8 @@ export function expectErrorBody(body: unknown, message?: string | RegExp): void 
   if (typeof message === 'string') expect(actual).toBe(message);
   if (message instanceof RegExp) expect(actual).toMatch(message);
 }
+
+/** A UTC date-time this many days from now, in the API's own format: 2026-11-28T08:00:00Z. */
+export function inDays(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}

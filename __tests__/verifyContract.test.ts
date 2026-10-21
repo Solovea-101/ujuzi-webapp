@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { bodyProblems, classifyProbe, countFields, parseContract, responseCheck, strictify } from '@/scripts/verifyContract';
+import { bodyProblems, classifyProbe, countFields, fieldProblems, fillPlaceholders, parseContract, responseCheck, strictify } from '@/scripts/verifyContract';
 
 const contract = (paths: string) => `openapi: 3.0.3\ninfo: { title: T, version: 1.0.0 }\npaths:\n${paths}`;
 
@@ -66,6 +66,14 @@ describe('parseContract', () => {
       expect(op.url).not.toMatch(/[{}]/);
       expect(op.statuses.length).toBeGreaterThan(0);
     }
+  });
+
+  it('probes with an id that cannot exist, so probing a built DELETE or PUT never touches a real record', () => {
+    const real = parseContract(readFileSync(path.join(__dirname, '..', 'openapi.yaml'), 'utf8'));
+    const del = real.operations.find((o) => o.key === 'DELETE /api/bookings/{bookingId}');
+    expect(del?.probeUrl).toBe('/api/bookings/verify-probe');
+    expect(del?.url).toBe('/api/bookings/bkg_6001'); // the documented example, used for nothing destructive
+    for (const op of real.operations) expect(op.probeUrl).not.toMatch(/[{}]/);
   });
 });
 
@@ -178,5 +186,32 @@ describe('field-by-field checking against the real contract', () => {
     expect(countFields([course, course])).toBe(24);
     expect(countFields([])).toBe(0);
     expect(countFields(undefined)).toBe(0);
+  });
+});
+
+describe('fillPlaceholders', () => {
+  it('fills captured values and reports the ones that were never captured', () => {
+    const vars = new Map([['bookingId', 'bkg_6003']]);
+    expect(fillPlaceholders('/api/bookings/{{bookingId}}', vars)).toEqual({ text: '/api/bookings/bkg_6003', missing: [] });
+    expect(fillPlaceholders('/api/{{a}}/{{b}}', vars)).toEqual({ text: '/api//', missing: ['a', 'b'] });
+    expect(fillPlaceholders('/api/courses', vars)).toEqual({ text: '/api/courses', missing: [] });
+  });
+});
+
+describe('fieldProblems', () => {
+  it('passes when every expected field has exactly the expected value', () => {
+    expect(fieldProblems({ crewSize: 8, status: 'pending', extra: true }, { crewSize: 8, status: 'pending' })).toEqual([]);
+  });
+
+  it('names each field that is wrong or missing', () => {
+    expect(fieldProblems({ crewSize: 6 }, { crewSize: 8, status: 'pending' })).toEqual([
+      'crewSize should be 8, but is 6',
+      'status should be "pending", but is undefined',
+    ]);
+  });
+
+  it('refuses to compare an answer that is not an object', () => {
+    expect(fieldProblems([1], { a: 1 })).toHaveLength(1);
+    expect(fieldProblems(undefined, { a: 1 })).toHaveLength(1);
   });
 });

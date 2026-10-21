@@ -265,6 +265,44 @@ function storeContract(name: string, fresh: () => Promise<Store>) {
       });
     });
 
+    describe('one pending booking per course and event name', () => {
+      const booking = (course_id: string, event_name: string) => ({ course_id, event_name, crew_size: 6, preferred_start: FUTURE });
+
+      it('refuses a second pending booking for the same event, ignoring case', async () => {
+        const store = await fresh();
+        const { catering } = await withCentresAndCourses(store);
+        await store.createBooking(booking(catering.id, 'Kamau reunion'));
+        await expect(store.createBooking(booking(catering.id, 'Kamau reunion'))).rejects.toBeInstanceOf(StoreConflictError);
+        await expect(store.createBooking(booking(catering.id, 'KAMAU REUNION'))).rejects.toBeInstanceOf(StoreConflictError);
+      });
+
+      it('allows the same event name on another course, and another event on the same course', async () => {
+        const store = await fresh();
+        const { catering, plumbing } = await withCentresAndCourses(store);
+        await store.createBooking(booking(catering.id, 'Kamau reunion'));
+        await expect(store.createBooking(booking(plumbing.id, 'Kamau reunion'))).resolves.toMatchObject({ status: 'pending' });
+        await expect(store.createBooking(booking(catering.id, 'Otieno wedding'))).resolves.toMatchObject({ status: 'pending' });
+      });
+
+      it('allows the event again once the first booking is decided or cancelled', async () => {
+        const store = await fresh();
+        const { catering } = await withCentresAndCourses(store);
+        const first = await store.createBooking(booking(catering.id, 'Kamau reunion'));
+        await store.decideBooking(first.id, 'declined');
+        const second = await store.createBooking(booking(catering.id, 'Kamau reunion'));
+        await store.deleteBooking(second.id);
+        await expect(store.createBooking(booking(catering.id, 'Kamau reunion'))).resolves.toMatchObject({ status: 'pending' });
+      });
+
+      it('creates nothing when it refuses', async () => {
+        const store = await fresh();
+        const { catering, westlands } = await withCentresAndCourses(store);
+        await store.createBooking(booking(catering.id, 'Kamau reunion'));
+        await expect(store.createBooking(booking(catering.id, 'kamau reunion'))).rejects.toBeInstanceOf(StoreConflictError);
+        expect(await store.listBookingsForCentre(westlands.id)).toHaveLength(1);
+      });
+    });
+
     describe('kazi applications', () => {
       it('are saved by Kazi id, listed per graduate and followed while pending', async () => {
         const store = await fresh();

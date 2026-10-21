@@ -41,6 +41,11 @@ export interface Operation {
   key: string;
   /** The path with every {parameter} replaced by its example, ready to request. */
   url: string;
+  /**
+   * The path with every {parameter} replaced by an id that cannot exist. Probes use this, so a built
+   * DELETE or PUT probed for existence can never touch a real record.
+   */
+  probeUrl: string;
   /** Status codes the contract documents for this operation. */
   statuses: string[];
   responses: Json;
@@ -112,7 +117,8 @@ export function parseContract(text: string): Contract {
         if (example === undefined) throw new Error(`${key}: path parameter {${name}} has no example`);
         return encodeURIComponent(example);
       });
-      operations.push({ method, template, key, url, statuses: Object.keys(op.responses), responses: op.responses });
+      const probeUrl = template.replace(/\{[^}]+\}/g, 'verify-probe');
+      operations.push({ method, template, key, url, probeUrl, statuses: Object.keys(op.responses), responses: op.responses });
     }
   }
   if (operations.length === 0) throw new Error('paths has no operations');
@@ -225,7 +231,7 @@ interface Probe {
 
 async function probe(baseUrl: string, operation: Operation): Promise<Probe> {
   const hasBody = operation.method === 'post' || operation.method === 'put' || operation.method === 'patch';
-  const res = await fetch(baseUrl + operation.url, {
+  const res = await fetch(baseUrl + operation.probeUrl, {
     method: operation.method.toUpperCase(),
     headers: hasBody ? { 'Content-Type': 'application/json' } : undefined,
     body: hasBody ? '{}' : undefined,
@@ -242,41 +248,140 @@ async function probe(baseUrl: string, operation: Operation): Promise<Probe> {
 
 export interface CaseResult {
   case: VerifyCase;
+  /** The request with its {{placeholders}} filled in. */
+  request: string;
   got: number | undefined;
+  fields: number;
+  /** What the follow-up GET did, for the report. */
+  then: string | undefined;
+  problems: string[];
+}
+
+interface RunContext {
+  baseUrl: string;
+  contract: Contract;
+  operations: Map<string, Operation>;
+  /** Values captured from earlier answers, for {{placeholders}}. */
+  vars: Map<string, string>;
+  countBookings: () => Promise<number>;
+}
+
+interface Exchange {
+  status: number;
+  body: unknown;
+  headers: Headers;
   fields: number;
   problems: string[];
 }
 
-async function runCase(baseUrl: string, contract: Contract, operation: Operation, c: VerifyCase): Promise<CaseResult> {
-  const method = operation.method.toUpperCase();
-  const result: CaseResult = { case: c, got: undefined, fields: 0, problems: [] };
-  const res = await fetch(baseUrl + c.request, { method });
-  result.got = res.status;
+/** Sends one request and checks the answer against the contract: documented status, JSON, every field. */
+async function exchange(
+  ctx: RunContext,
+  operation: Operation,
+  request: string,
+  expected: number,
+  sent: string | undefined,
+): Promise<Exchange> {
+  const res = await fetch(ctx.baseUrl + request, {
+    method: operation.method.toUpperCase(),
+    headers: sent !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    body: sent,
+  });
+  const out: Exchange = { status: res.status, body: undefined, headers: res.headers, fields: 0, problems: [] };
 
-  if (!operation.statuses.includes(String(c.status))) {
-    result.problems.push(`the case expects ${c.status}, which the contract does not document for ${operation.key}`);
+  if (!operation.statuses.includes(String(expected))) {
+    out.problems.push(`the case expects ${expected}, which the contract does not document for ${operation.key}`);
   }
-  if (res.status !== c.status) result.problems.push(`expected status ${c.status}, got ${res.status}`);
+  if (res.status !== expected) out.problems.push(`expected status ${expected}, got ${res.status}`);
+  const text = await res.text();
   if (!operation.statuses.includes(String(res.status))) {
-    result.problems.push(`status ${res.status} is not documented for ${operation.key}`);
+    out.problems.push(`status ${res.status} is not documented for ${operation.key}`);
+    return out;
+  }
+
+  if (text !== '') {
+    try {
+      out.body = JSON.parse(text);
+    } catch {
+      out.problems.push('the body is not JSON');
+      return out;
+    }
+    if (!(res.headers.get('content-type') ?? '').startsWith('application/json')) {
+      out.problems.push(`content-type is ${res.headers.get('content-type')}, not application/json`);
+    }
+  }
+  out.problems.push(...bodyProblems(responseCheck(ctx.contract, operation, String(res.status)), out.body));
+  out.fields = countFields(out.body);
+  return out;
+}
+
+/** Replaces {{name}} with a captured value; names that were never captured come back in `missing`. */
+export function fillPlaceholders(text: string, vars: Map<string, string>): { text: string; missing: string[] } {
+  const missing: string[] = [];
+  const filled = text.replace(/\{\{(\w+)\}\}/g, (_, name: string) => {
+    const value = vars.get(name);
+    if (value === undefined) missing.push(name);
+    return value ?? '';
+  });
+  return { text: filled, missing };
+}
+
+/** Each expected field must be in the body with exactly the expected value. */
+export function fieldProblems(body: unknown, expected: Record<string, unknown>): string[] {
+  if (!isObject(body)) return ['the answer is not an object, so its fields cannot be compared'];
+  return Object.entries(expected)
+    .filter(([name, value]) => JSON.stringify(body[name]) !== JSON.stringify(value))
+    .map(([name, value]) => `${name} should be ${JSON.stringify(value)}, but is ${JSON.stringify(body[name])}`);
+}
+
+async function runCase(ctx: RunContext, operation: Operation, c: VerifyCase): Promise<CaseResult> {
+  const result: CaseResult = { case: c, request: c.request, got: undefined, fields: 0, then: undefined, problems: [] };
+  const filled = fillPlaceholders(c.request, ctx.vars);
+  result.request = filled.text;
+  if (filled.missing.length > 0) {
+    result.problems.push(`no value for {{${filled.missing.join('}}, {{')}}}: the case that creates it did not run or failed`);
     return result;
   }
 
-  const text = await res.text();
-  let body: unknown = undefined;
-  if (text !== '') {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      result.problems.push('the body is not JSON');
-      return result;
-    }
-    if (!(res.headers.get('content-type') ?? '').startsWith('application/json')) {
-      result.problems.push(`content-type is ${res.headers.get('content-type')}, not application/json`);
+  const sent = c.rawBody ?? (c.body !== undefined ? JSON.stringify(c.body) : undefined);
+  const bookingsBefore = c.noNewBooking ? await ctx.countBookings() : undefined;
+  const main = await exchange(ctx, operation, filled.text, c.status, sent);
+  result.got = main.status;
+  result.fields = main.fields;
+  result.problems.push(...main.problems);
+
+  if (c.fields) result.problems.push(...fieldProblems(main.body, c.fields));
+  for (const [name, pattern] of Object.entries(c.headers ?? {})) {
+    const value = main.headers.get(name);
+    if (value === null || !pattern.test(value)) result.problems.push(`header ${name} is ${JSON.stringify(value)}, which does not match ${pattern}`);
+  }
+  for (const [name, field] of Object.entries(c.capture ?? {})) {
+    const value = isObject(main.body) ? main.body[field] : undefined;
+    if (typeof value === 'string' || typeof value === 'number') ctx.vars.set(name, String(value));
+    else result.problems.push(`cannot capture ${name}: the answer has no "${field}"`);
+  }
+  if (bookingsBefore !== undefined) {
+    const after = await ctx.countBookings();
+    if (after !== bookingsBefore) result.problems.push(`the number of bookings went from ${bookingsBefore} to ${after}, but nothing should have been created`);
+  }
+
+  if (c.then) {
+    const followUp = ctx.operations.get(c.then.operation);
+    const next = fillPlaceholders(c.then.request, ctx.vars);
+    if (!followUp) {
+      result.problems.push(`then: ${c.then.operation} is not in ${CONTRACT}`);
+    } else if (next.missing.length > 0) {
+      result.problems.push(`then: no value for {{${next.missing.join('}}, {{')}}}`);
+    } else {
+      const again = await exchange(ctx, followUp, next.text, c.then.status, undefined);
+      result.then = `${followUp.method.toUpperCase()} ${next.text} -> ${again.status}`;
+      result.problems.push(...again.problems.map((p) => `then: ${p}`));
+      if (c.then.fields) result.problems.push(...fieldProblems(again.body, c.then.fields).map((p) => `then: ${p}`));
+      if (c.then.sameAsAnswer && JSON.stringify(again.body) !== JSON.stringify(main.body)) {
+        result.problems.push('then: the re-fetched booking is not the one the write answered with');
+      }
     }
   }
-  result.problems.push(...bodyProblems(responseCheck(contract, operation, String(res.status)), body));
-  result.fields = countFields(body);
   return result;
 }
 
@@ -306,10 +411,10 @@ export function renderReport(contract: Contract, results: CaseResult[], pending:
     '',
     '## Cases',
     '',
-    '| Operation | Case | Request | Expected | Got | Fields checked | Result |',
-    '|---|---|---|---|---|---|---|',
+    '| Operation | Case | Request | Expected | Got | Fields checked | Then (re-fetch) | Result |',
+    '|---|---|---|---|---|---|---|---|',
     ...results.map((r) =>
-      `| \`${cell(r.case.operation)}\` | ${cell(r.case.name)} | \`${cell(r.case.request)}\` | ${r.case.status} | ${r.got ?? 'none'} | ${r.fields} | ${r.problems.length === 0 ? 'pass' : `**FAIL**: ${cell(r.problems.join('; '))}`} |`,
+      `| \`${cell(r.case.operation)}\` | ${cell(r.case.name)} | \`${cell(r.request)}\` | ${r.case.status} | ${r.got ?? 'none'} | ${r.fields} | ${r.then ? `\`${cell(r.then)}\`` : ''} | ${r.problems.length === 0 ? 'pass' : `**FAIL**: ${cell(r.problems.join('; '))}`} |`,
     ),
     '',
     '## Not built yet',
@@ -369,6 +474,7 @@ async function main(): Promise<number> {
     process.env.KAZI_API_URL = 'http://127.0.0.1:9';
     process.env.KAZI_WS_URL = 'ws://127.0.0.1:9';
     const { createServer } = await import('../server');
+    const { getStore } = await import('../lib/db');
     const server = createServer();
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -377,14 +483,26 @@ async function main(): Promise<number> {
     const results: CaseResult[] = [];
     try {
       for (const operation of contract.operations) probes.push(await probe(baseUrl, operation));
-      const byKey = new Map(contract.operations.map((o) => [o.key, o]));
+      const ctx: RunContext = {
+        baseUrl,
+        contract,
+        operations: new Map(contract.operations.map((o) => [o.key, o])),
+        vars: new Map(),
+        // The server runs in this process and shares its store, so a rejected POST can be shown to have created nothing.
+        countBookings: async () => {
+          const store = await getStore();
+          let total = 0;
+          for (const centre of await store.listCentres()) total += (await store.listBookingsForCentre(centre.id)).length;
+          return total;
+        },
+      };
       for (const c of CASES) {
-        const operation = byKey.get(c.operation);
+        const operation = ctx.operations.get(c.operation);
         if (!operation) {
           failures.push(`case "${c.name}" is for ${c.operation}, which is not in ${CONTRACT}`);
           continue;
         }
-        results.push(await runCase(baseUrl, contract, operation, c));
+        results.push(await runCase(ctx, operation, c));
       }
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));

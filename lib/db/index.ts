@@ -28,3 +28,8 @@ async function createStore(): Promise<Store> {
   await seedStore(store);
   return store;
 }
+
+/** Drops the shared store so the next getStore() builds a fresh one. For tests. */
+export function resetStore(): void {
+  shared.__ujuziStore = undefined;
+}

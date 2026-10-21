@@ -264,6 +264,12 @@ export class MemoryStore implements Store {
 
   async createBooking(input: NewBooking): Promise<BookingRow> {
     this.mustFindCourse(input.course_id);
+    const event = input.event_name.toLowerCase();
+    for (const existing of this.bookings.values()) {
+      if (existing.status === 'pending' && existing.course_id === input.course_id && existing.event_name.toLowerCase() === event) {
+        throw new StoreConflictError(`A pending booking named "${existing.event_name}" already exists for ${input.course_id}`);
+      }
+    }
     const row: BookingRow = { id: this.nextId('booking'), ...input, status: 'pending', created_at: new Date() };
     this.bookings.set(row.id, row);
     return copy(row);
