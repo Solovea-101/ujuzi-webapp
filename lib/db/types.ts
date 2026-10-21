@@ -163,10 +163,22 @@ export interface CourseFilter {
 // ---- Errors -------------------------------------------------------------------------------------
 
 /** A write broke a uniqueness rule: email taken, already enrolled, certificate already issued, ... */
-export class StoreConflictError extends Error {}
+export class StoreConflictError extends Error {
+  name = 'StoreConflictError';
+}
 
 /** A write pointed at a row that does not exist. Handlers check first, so this means a bug. */
-export class StoreReferenceError extends Error {}
+export class StoreReferenceError extends Error {
+  name = 'StoreReferenceError';
+}
+
+// Next compiles each route into its own bundle, each with its own copy of the classes above, and
+// the store is shared between them. `instanceof` can then say no to an error the shared store
+// threw, so handlers recognise these errors by name.
+export const isStoreConflict = (err: unknown): err is StoreConflictError =>
+  err instanceof Error && err.name === 'StoreConflictError';
+export const isStoreReference = (err: unknown): err is StoreReferenceError =>
+  err instanceof Error && err.name === 'StoreReferenceError';
 
 /**
  * What happened to a booking that may only be changed while pending. The check and the change are
@@ -185,6 +197,9 @@ export type BookingOutcome =
  * identically. Rules every implementation follows:
  *   - get* methods answer undefined when nothing matches; list* methods answer [] and never undefined.
  *   - lists come back in id order, which is creation order; certificates by certificate number.
+ *   - ids only increase and are never reused, but they are not gap-free. PostgreSQL takes the next
+ *     number before it inserts, so a refused write (a duplicate, a bad reference) skips one; the
+ *     in-memory store does not. Nothing may rely on ids being consecutive.
  *   - rows returned are copies; changing one never changes what is stored.
  *   - a write that breaks a uniqueness rule throws StoreConflictError; one that points at a missing
  *     row throws StoreReferenceError.
@@ -221,7 +236,8 @@ export interface Store {
   /** Marks a certificate revoked (valid: false from then on). Revoking twice keeps the first date. */
   revokeCertificate(certificateNo: string): Promise<CertificateRow | undefined>;
 
-  // Bookings (only pending bookings can change or be cancelled)
+  // Bookings (only pending bookings can change or be cancelled; a second pending booking with the
+  // same course and event name, ignoring case, is a StoreConflictError)
   createBooking(input: NewBooking): Promise<BookingRow>;
   getBooking(id: string): Promise<BookingRow | undefined>;
   listBookingsForCentre(centreId: string): Promise<BookingRow[]>;
