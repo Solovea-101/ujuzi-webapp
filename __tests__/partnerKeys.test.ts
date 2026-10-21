@@ -88,7 +88,13 @@ const OPERATIONS: Array<[string, 'get' | 'post' | 'put' | 'delete', string, obje
   ['DELETE /api/bookings/{bookingId}', 'delete', '/api/bookings/bkg_6001', undefined],
 ];
 
-describe.each(OPERATIONS)('%s', (_name, method, path, payload) => {
+// The course and certificate reads also accept a login token (the website's pages), so their 401 says so.
+const EITHER = new Set(['GET /api/courses', 'GET /api/courses/{courseId}', 'GET /api/certificates/{certificateNo}']);
+const KEY_ONLY_MESSAGE = 'Send your partner key as X-API-Key';
+const EITHER_MESSAGE = 'Send your partner key as X-API-Key, or log in and send Authorization: Bearer YOUR_TOKEN';
+
+describe.each(OPERATIONS)('%s', (name, method, path, payload) => {
+  const message = EITHER.has(name) ? EITHER_MESSAGE : KEY_ONLY_MESSAGE;
   const send = (headers: Record<string, string>) => {
     const req = request(app.server)[method](path).set(headers);
     return payload ? req.send(payload) : req;
@@ -97,7 +103,7 @@ describe.each(OPERATIONS)('%s', (_name, method, path, payload) => {
   it('answers 401 { message } without a key', async () => {
     const res = await send({});
     expect(res.status).toBe(401);
-    expectErrorBody(res.body, 'Send your partner key as X-API-Key');
+    expectErrorBody(res.body, message);
   });
 
   it.each([
@@ -110,7 +116,7 @@ describe.each(OPERATIONS)('%s', (_name, method, path, payload) => {
   ])('answers 401 for %s', async (_case, headers) => {
     const res = await send(headers);
     expect(res.status).toBe(401);
-    expectErrorBody(res.body, 'Send your partner key as X-API-Key');
+    expectErrorBody(res.body, message);
   });
 
   it('lets a valid key through, whichever way the header is spelled', async () => {

@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { requirePartner } from '@/lib/auth/guards';
+import { requirePartner, requireStaff } from '@/lib/auth/guards';
 import { getStore } from '@/lib/db';
 import { isStoreConflict } from '@/lib/db/types';
 import { fail, guarded, json, readJson } from '@/lib/http';
@@ -8,8 +8,18 @@ import { parseNewBooking } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
+// Endpoint 23 (G5): GET /api/bookings. Staff see the bookings for their own centre's courses.
+export async function GET(req: NextRequest) {
+  return guarded(async () => {
+    const guard = await requireStaff(req);
+    if (!guard.ok) return guard.response;
+    if (!guard.user.centre_id) return fail(403, 'This staff account is not attached to a centre');
+    const rows = await (await getStore()).listBookingsForCentre(guard.user.centre_id);
+    return json<Booking[]>(200, rows.map(toBooking));
+  });
+}
+
 // Endpoint 4 (S3): POST /api/bookings. Validation first, then the course, then the duplicate rule.
-// GET /api/bookings (staff list, Endpoint 23) is added to this file with the staff login.
 export async function POST(req: NextRequest) {
   return guarded(async () => {
     const guard = requirePartner(req);

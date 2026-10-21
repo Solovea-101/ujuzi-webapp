@@ -3,8 +3,12 @@ import {
   CERTIFICATE_NO_PATTERN,
   type BookingChange,
   type Category,
+  type CertificateLevel,
   type CourseFilter,
   type NewBooking,
+  type NewCourse,
+  type Role,
+  CERTIFICATE_LEVELS,
 } from '@/lib/db/types';
 
 export type Valid<T> = { ok: true; value: T } | { ok: false; message: string };
@@ -153,4 +157,153 @@ export function parseBookingChange(body: unknown, now = Date.now()): Valid<Booki
   const start = futureDateTime('preferredStart', fields.value.preferredStart, now);
   if (!start.ok) return start;
   return { ok: true, value: { crew_size: size.value, preferred_start: start.value } };
+}
+
+// ---- Accounts, courses, certificates -------------------------------------------------------------
+
+/** A trimmed text field of min to max characters. */
+function text(name: string, value: unknown, min: number, max: number): Valid<string> {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  if (trimmed.length < min || trimmed.length > max) {
+    return { ok: false, message: `${name} must be ${min} to ${max} characters` };
+  }
+  return { ok: true, value: trimmed };
+}
+
+/** A text id such as crs_501: not empty, at most 64 characters. */
+function idField(name: string, example: string, value: unknown): Valid<string> {
+  if (typeof value !== 'string' || value.trim() === '' || value.length > 64) {
+    return { ok: false, message: `${name} must be a text id of up to 64 characters, for example ${example}` };
+  }
+  return { ok: true, value };
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function email(value: unknown): Valid<string> {
+  const address = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (address.length > 254 || !EMAIL.test(address)) return { ok: false, message: 'email must be an email address, for example achieng@example.com' };
+  return { ok: true, value: address };
+}
+
+export interface NewUserInput {
+  role: Role;
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  /** Staff only. */
+  centreId?: string;
+  inviteCode?: string;
+}
+
+const USER_FIELDS = ['role', 'email', 'password', 'firstName', 'lastName', 'centreId', 'inviteCode'] as const;
+
+/** POST /api/auth/register. A graduate sends no centreId or inviteCode; a staff member must send both. */
+export function parseNewUser(body: unknown): Valid<NewUserInput> {
+  const fields = objectWithFields(body, USER_FIELDS, ['role', 'email', 'password', 'firstName', 'lastName']);
+  if (!fields.ok) return fields;
+  const { role, password } = fields.value;
+
+  if (role !== 'graduate' && role !== 'staff') return { ok: false, message: 'role must be graduate or staff' };
+  const address = email(fields.value.email);
+  if (!address.ok) return address;
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
+    return { ok: false, message: 'password must be 8 to 128 characters' };
+  }
+  const firstName = text('firstName', fields.value.firstName, 1, 60);
+  if (!firstName.ok) return firstName;
+  const lastName = text('lastName', fields.value.lastName, 1, 60);
+  if (!lastName.ok) return lastName;
+
+  const user: NewUserInput = { role, email: address.value, password, firstName: firstName.value, lastName: lastName.value };
+  if (role === 'graduate') {
+    if (fields.value.centreId !== undefined || fields.value.inviteCode !== undefined) {
+      return { ok: false, message: 'centreId and inviteCode are only for staff accounts' };
+    }
+    return { ok: true, value: user };
+  }
+  const missing = ['centreId', 'inviteCode'].filter((name) => fields.value[name] === undefined);
+  if (missing.length > 0) return { ok: false, message: `Missing required field(s): ${missing.join(', ')}` };
+  const centreId = idField('centreId', 'cen_11', fields.value.centreId);
+  if (!centreId.ok) return centreId;
+  const inviteCode = text('inviteCode', fields.value.inviteCode, 1, 200);
+  if (!inviteCode.ok) return inviteCode;
+  return { ok: true, value: { ...user, centreId: centreId.value, inviteCode: inviteCode.value } };
+}
+
+/** POST /api/auth/login. */
+export function parseCredentials(body: unknown): Valid<{ email: string; password: string }> {
+  const fields = objectWithFields(body, ['email', 'password'], ['email', 'password']);
+  if (!fields.ok) return fields;
+  const address = email(fields.value.email);
+  if (!address.ok) return address;
+  const { password } = fields.value;
+  if (typeof password !== 'string' || password.length < 1 || password.length > 128) {
+    return { ok: false, message: 'password must be 1 to 128 characters' };
+  }
+  return { ok: true, value: { email: address.value, password } };
+}
+
+/** POST /api/enrolments. */
+export function parseNewEnrolment(body: unknown): Valid<{ courseId: string }> {
+  const fields = objectWithFields(body, ['courseId'], ['courseId']);
+  if (!fields.ok) return fields;
+  const courseId = idField('courseId', 'crs_501', fields.value.courseId);
+  return courseId.ok ? { ok: true, value: { courseId: courseId.value } } : courseId;
+}
+
+/** POST /api/certificates. */
+export function parseNewCertificate(body: unknown): Valid<{ enrolmentId: string }> {
+  const fields = objectWithFields(body, ['enrolmentId'], ['enrolmentId']);
+  if (!fields.ok) return fields;
+  const enrolmentId = idField('enrolmentId', 'enr_0001', fields.value.enrolmentId);
+  return enrolmentId.ok ? { ok: true, value: { enrolmentId: enrolmentId.value } } : enrolmentId;
+}
+
+/** PATCH /api/bookings/{id}: the staff decision. */
+export function parseBookingDecision(body: unknown): Valid<'confirmed' | 'declined'> {
+  const fields = objectWithFields(body, ['status'], ['status']);
+  if (!fields.ok) return fields;
+  const { status } = fields.value;
+  if (status !== 'confirmed' && status !== 'declined') return { ok: false, message: 'status must be confirmed or declined' };
+  return { ok: true, value: status };
+}
+
+const COURSE_FIELDS = ['title', 'category', 'durationWeeks', 'feeKes', 'nextStart', 'certificateLevel'] as const;
+
+/** POST /api/courses and PUT /api/courses/{id}: every detail of a course except its centre. */
+export function parseCourseDetails(body: unknown, now = Date.now()): Valid<Omit<NewCourse, 'centre_id'>> {
+  const fields = objectWithFields(body, COURSE_FIELDS, COURSE_FIELDS);
+  if (!fields.ok) return fields;
+  const { category, durationWeeks, feeKes, certificateLevel } = fields.value;
+
+  const title = text('title', fields.value.title, 1, 120);
+  if (!title.ok) return title;
+  if (!CATEGORIES.includes(category as Category)) {
+    return { ok: false, message: `category must be one of ${CATEGORIES.join(', ')}` };
+  }
+  if (typeof durationWeeks !== 'number' || !Number.isInteger(durationWeeks) || durationWeeks < 1 || durationWeeks > 104) {
+    return { ok: false, message: 'durationWeeks must be a whole number from 1 to 104' };
+  }
+  if (typeof feeKes !== 'number' || !Number.isInteger(feeKes) || feeKes < 0 || feeKes > 1_000_000) {
+    return { ok: false, message: 'feeKes must be a whole number of shillings from 0 to 1000000' };
+  }
+  const start = futureDateTime('nextStart', fields.value.nextStart, now);
+  if (!start.ok) return start;
+  if (!CERTIFICATE_LEVELS.includes(certificateLevel as CertificateLevel)) {
+    return { ok: false, message: `certificateLevel must be one of ${CERTIFICATE_LEVELS.join(', ')}` };
+  }
+
+  return {
+    ok: true,
+    value: {
+      title: title.value,
+      category: category as Category,
+      duration_weeks: durationWeeks,
+      fee_kes: feeKes,
+      next_start: start.value,
+      certificate_level: certificateLevel as CertificateLevel,
+    },
+  };
 }

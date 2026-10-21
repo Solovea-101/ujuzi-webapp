@@ -7,6 +7,7 @@ import Ajv, { type ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
 import { parse } from 'yaml';
 import { hashKey } from '../lib/auth/partnerKey';
+import { DEMO_PASSWORD } from '../lib/db/seedData';
 import { CASES, type Auth, type VerifyCase } from './verifyCases';
 
 /**
@@ -271,17 +272,58 @@ interface RunContext {
   countBookings: () => Promise<number>;
   /** The partner key verify configured the server with. */
   partnerKey: string;
+  /** Login tokens by who they belong to, made on first use. */
+  tokens: Map<string, string>;
+  hasUser: (email: string) => Promise<boolean>;
+}
+
+/** The seeded people a case can log in as (lib/db/seedData.ts). They all use DEMO_PASSWORD. */
+const LOGIN_EMAILS: Record<string, string> = {
+  achieng: 'achieng.otieno@example.com',
+  logoutSession: 'achieng.otieno@example.com',
+  mwanaisha: 'mwanaisha.juma@example.com',
+  westlands: 'wanjiru.njeri@example.com',
+  hurlingham: 'peter.mwangi@example.com',
+  ruaka: 'grace.wambui@example.com',
+};
+
+async function tokenFor(login: string, ctx: RunContext): Promise<string> {
+  const known = ctx.tokens.get(login);
+  if (known) return known;
+  const res = await fetch(`${ctx.baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: LOGIN_EMAILS[login], password: DEMO_PASSWORD }),
+  });
+  const body: unknown = await res.json();
+  if (!res.ok || !isObject(body) || typeof body.token !== 'string') {
+    throw new Error(`verify could not log in as ${login}: the login answered ${res.status}`);
+  }
+  ctx.tokens.set(login, body.token);
+  return body.token;
 }
 
 /** Who a request is sent as when a case does not say: the first way in that the contract lists. */
 export function defaultAuth(operation: Operation): Auth {
-  return operation.security[0]?.[0] === 'partnerKey' ? 'partner' : 'none';
+  const first = operation.security[0]?.[0];
+  if (first === 'partnerKey') return 'partner';
+  if (first === 'staffToken') return 'westlands';
+  if (first === 'userToken') return 'achieng';
+  return 'none';
 }
 
-function authHeaders(auth: Auth, ctx: RunContext): Record<string, string> {
-  if (auth === 'partner') return { 'X-API-Key': ctx.partnerKey };
-  if (auth === 'wrongKey') return { 'X-API-Key': 'not-the-partner-key' };
-  return {};
+async function authHeaders(auth: Auth, ctx: RunContext): Promise<Record<string, string>> {
+  if (typeof auth === 'object') {
+    const token = ctx.vars.get(auth.bearer);
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+  switch (auth) {
+    case 'partner': return { 'X-API-Key': ctx.partnerKey };
+    case 'wrongKey': return { 'X-API-Key': 'not-the-partner-key' };
+    case 'none': return {};
+    case 'badToken': return { Authorization: `Bearer ${'0'.repeat(64)}` };
+    default: return { Authorization: `Bearer ${await tokenFor(auth, ctx)}` };
+  }
 }
 
 interface Exchange {
@@ -303,7 +345,7 @@ async function exchange(
 ): Promise<Exchange> {
   const res = await fetch(ctx.baseUrl + request, {
     method: operation.method.toUpperCase(),
-    headers: { ...(sent !== undefined ? { 'Content-Type': 'application/json' } : {}), ...authHeaders(auth, ctx) },
+    headers: { ...(sent !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(await authHeaders(auth, ctx)) },
     body: sent,
   });
   const out: Exchange = { status: res.status, body: undefined, headers: res.headers, fields: 0, problems: [] };
@@ -379,6 +421,9 @@ async function runCase(ctx: RunContext, operation: Operation, c: VerifyCase): Pr
     if (typeof value === 'string' || typeof value === 'number') ctx.vars.set(name, String(value));
     else result.problems.push(`cannot capture ${name}: the answer has no "${field}"`);
   }
+  if (c.noUserWithEmail !== undefined && (await ctx.hasUser(c.noUserWithEmail))) {
+    result.problems.push(`an account exists for ${c.noUserWithEmail}, but nothing should have been created`);
+  }
   if (bookingsBefore !== undefined) {
     const after = await ctx.countBookings();
     if (after !== bookingsBefore) result.problems.push(`the number of bookings went from ${bookingsBefore} to ${after}, but nothing should have been created`);
@@ -396,6 +441,12 @@ async function runCase(ctx: RunContext, operation: Operation, c: VerifyCase): Pr
       result.then = `${followUp.method.toUpperCase()} ${next.text} -> ${again.status}`;
       result.problems.push(...again.problems.map((p) => `then: ${p}`));
       if (c.then.fields) result.problems.push(...fieldProblems(again.body, c.then.fields).map((p) => `then: ${p}`));
+      if (c.then.includes) {
+        const items: unknown[] = Array.isArray(again.body) ? again.body : [];
+        if (!items.some((item) => fieldProblems(item, c.then!.includes!).length === 0)) {
+          result.problems.push(`then: no item of the list has ${JSON.stringify(c.then.includes)}`);
+        }
+      }
       if (c.then.sameAsAnswer && JSON.stringify(again.body) !== JSON.stringify(main.body)) {
         result.problems.push('then: the re-fetched booking is not the one the write answered with');
       }
@@ -494,6 +545,10 @@ async function main(): Promise<number> {
     process.env.KAZI_WS_URL = 'ws://127.0.0.1:9';
     // Only the hash of this key is configured, exactly as in production.
     process.env.PARTNER_KEYS = hashKey(VERIFY_PARTNER_KEY);
+    // Fixed settings, so a developer's own environment cannot change what verify sees.
+    process.env.SESSION_SECRET = 'verify-run-secret';
+    delete process.env.SEED_PASSWORD;
+    delete process.env.STAFF_INVITE_CODE;
     const { createServer } = await import('../server');
     const { getStore } = await import('../lib/db');
     const server = createServer();
@@ -510,6 +565,8 @@ async function main(): Promise<number> {
         operations: new Map(contract.operations.map((o) => [o.key, o])),
         vars: new Map(),
         partnerKey: VERIFY_PARTNER_KEY,
+        tokens: new Map(),
+        hasUser: async (email) => (await (await getStore()).getUserByEmail(email)) !== undefined,
         // The server runs in this process and shares its store, so a rejected POST can be shown to have created nothing.
         countBookings: async () => {
           const store = await getStore();

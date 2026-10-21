@@ -2,6 +2,7 @@ import { createServer as createHttpServer, type IncomingMessage, type Server } f
 import { loadEnvConfig } from '@next/env';
 import next from 'next';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { prepareDatabase } from './lib/db/startup';
 
 /** Route handlers cannot accept WebSocket upgrades, so this one path is served from here. */
 export const FEED_PATH = '/api/me/applications/feed';
@@ -62,9 +63,10 @@ export function createServer(): Server {
   return server;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   loadEnvConfig(process.cwd(), isDev());
   const port = Number(process.env.PORT) || 3000;
+  await prepareDatabase();
   const server = createServer();
 
   server.listen(port, () => {
@@ -82,4 +84,9 @@ function main(): void {
   process.on('SIGINT', stop);
 }
 
-if (require.main === module) main();
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('Ujuzi could not start:', err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
+}

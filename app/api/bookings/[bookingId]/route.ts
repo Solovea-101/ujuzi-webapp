@@ -1,10 +1,10 @@
 import type { NextRequest } from 'next/server';
-import { requirePartner } from '@/lib/auth/guards';
+import { requirePartner, requireStaff } from '@/lib/auth/guards';
 import { getStore } from '@/lib/db';
 import type { BookingOutcome } from '@/lib/db/types';
 import { fail, guarded, json, noContent, readJson } from '@/lib/http';
 import { toBooking, type Booking } from '@/lib/mappers';
-import { parseBookingChange } from '@/lib/validation';
+import { parseBookingChange, parseBookingDecision } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,4 +58,26 @@ export async function DELETE(req: NextRequest, { params }: Context) {
   });
 }
 
-// PATCH (staff confirm or decline, Endpoint 24) is added with the staff login.
+// Endpoint 24 (G5): PATCH /api/bookings/{bookingId}. Staff at the booking's centre confirm or decline a
+// pending booking. Order: login (401), body (400, 413), booking (404), centre (403), state (409).
+export async function PATCH(req: NextRequest, { params }: Context) {
+  return guarded(async () => {
+    const guard = await requireStaff(req);
+    if (!guard.ok) return guard.response;
+    const { bookingId } = await params;
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.response;
+    const decision = parseBookingDecision(parsed.body);
+    if (!decision.ok) return fail(400, decision.message);
+
+    const store = await getStore();
+    const booking = await store.getBooking(bookingId);
+    if (!booking) return fail(404, `Booking ${bookingId} not found`);
+    const course = await store.getCourse(booking.course_id);
+    if (course?.centre_id !== guard.user.centre_id) return fail(403, 'Only staff at this centre can decide its bookings.');
+
+    const outcome = await store.decideBooking(bookingId, decision.value);
+    if (outcome.kind !== 'ok') return refused(outcome, bookingId, 'decided');
+    return json<Booking>(200, toBooking(outcome.booking));
+  });
+}

@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { requirePartner } from '@/lib/auth/guards';
+import { requirePartnerOrUser } from '@/lib/auth/guards';
 import { getStore } from '@/lib/db';
 import { fail, guarded, json } from '@/lib/http';
 import { toCertificateCheck, type CertificateCheck } from '@/lib/mappers';
@@ -7,10 +7,10 @@ import { parseCertificateNo } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
-// Endpoint 3 (S2): GET /api/certificates/{certificateNo}
+// Endpoint 3 (S2): GET /api/certificates/{certificateNo}. A partner key, or the website's login token.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ certificateNo: string }> }) {
   return guarded(async () => {
-    const guard = requirePartner(req);
+    const guard = await requirePartnerOrUser(req);
     if (!guard.ok) return guard.response;
     const parsed = parseCertificateNo((await params).certificateNo);
     if (!parsed.ok) return fail(400, parsed.message);
