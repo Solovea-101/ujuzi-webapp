@@ -13,7 +13,7 @@ Entries are copied from real runs only: the command, the status and body as rece
 |---|---|---|---|
 | Kazi Connect | Live `openapi.yaml` `info.version` moves from 1.2.1 (1.3.0 adds endpoints 22-25 only), and endpoints 1-9 answer as the contract says | 1.2.1, identical to `partner-tests/kazi_openapi.yaml` | Still 1.2.1 when last checked, 2026-10-20. `GET /api/jobs?status=active` answered 200 with 9 jobs, after a 23 s wake-up. |
 | Sherehe | Sherehe's live URL is known and it has handed us its contract | TODO: URL from the humans | TODO |
-| Ujuzi | Our own endpoints exist, so partners can call them | Phase 0 only: no partner endpoints yet | Endpoints 1-7 (partner GETs and writes) built and verified. The website endpoints 8-23 and PATCH (Endpoint 24) are in the contract (0.2.0) but not built yet; partner key checking (Week 9) not built. See VERIFICATION.md. |
+| Ujuzi | Our own endpoints exist, so partners can call them | Phase 0 only: no partner endpoints yet | Endpoints 1-7 (partner GETs and writes) built and verified. The website endpoints 8-23 and PATCH (Endpoint 24) are in the contract (0.2.0) but not built yet. Partner key checking (R4) is built: all seven partner operations answer 401 without a valid key. See VERIFICATION.md. |
 
 ## Entries
 

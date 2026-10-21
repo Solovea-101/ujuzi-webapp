@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { requirePartner } from '@/lib/auth/guards';
 import { getStore } from '@/lib/db';
 import { isStoreConflict } from '@/lib/db/types';
 import { fail, guarded, json, readJson } from '@/lib/http';
@@ -11,6 +12,8 @@ export const dynamic = 'force-dynamic';
 // GET /api/bookings (staff list, Endpoint 23) is added to this file with the staff login.
 export async function POST(req: NextRequest) {
   return guarded(async () => {
+    const guard = requirePartner(req);
+    if (!guard.ok) return guard.response;
     const parsed = await readJson(req);
     if (!parsed.ok) return parsed.response;
     const input = parseNewBooking(parsed.body);

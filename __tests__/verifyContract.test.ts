@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { bodyProblems, classifyProbe, countFields, fieldProblems, fillPlaceholders, parseContract, responseCheck, strictify } from '@/scripts/verifyContract';
+import { bodyProblems, classifyProbe, countFields, defaultAuth, fieldProblems, fillPlaceholders, parseContract, responseCheck, strictify } from '@/scripts/verifyContract';
 
 const contract = (paths: string) => `openapi: 3.0.3\ninfo: { title: T, version: 1.0.0 }\npaths:\n${paths}`;
 
@@ -213,5 +213,30 @@ describe('fieldProblems', () => {
   it('refuses to compare an answer that is not an object', () => {
     expect(fieldProblems([1], { a: 1 })).toHaveLength(1);
     expect(fieldProblems(undefined, { a: 1 })).toHaveLength(1);
+  });
+});
+
+describe('defaultAuth', () => {
+  const contract = parseContract(readFileSync(path.join(__dirname, '..', 'openapi.yaml'), 'utf8'));
+  const auth = (key: string) => {
+    const operation = contract.operations.find((o) => o.key === key);
+    if (!operation) throw new Error(`no operation ${key}`);
+    return defaultAuth(operation);
+  };
+
+  it('sends the partner key where the contract lists a partner key first', () => {
+    expect(auth('POST /api/bookings')).toBe('partner');
+    expect(auth('GET /api/courses')).toBe('partner'); // partnerKey OR userToken: the key is listed first
+    expect(auth('DELETE /api/bookings/{bookingId}')).toBe('partner');
+  });
+
+  it('sends nothing where the contract needs no partner key', () => {
+    expect(auth('POST /api/auth/login')).toBe('none');
+  });
+
+  it('reads each operation\'s security alternatives from the contract', () => {
+    const get = contract.operations.find((o) => o.key === 'GET /api/courses');
+    expect(get?.security).toEqual([['partnerKey'], ['userToken']]);
+    expect(contract.operations.find((o) => o.key === 'PATCH /api/bookings/{bookingId}')?.security).toEqual([['staffToken']]);
   });
 });

@@ -6,7 +6,7 @@ Every change made to `openapi.yaml` after it is handed off to Sherehe in Week 4:
 
 Endpoints 1, 2, 3 and 5 (`GET /api/courses`, `GET /api/courses/{courseId}`, `GET /api/certificates/{certificateNo}`, `GET /api/bookings/{bookingId}`) were checked against `openapi.yaml` version 0.1.0 by `npm run verify`: 17 requests, good and bad input, every answer compared field by field (status, exact field names, types, enums, date-time format, no extra and no missing fields). All 17 matched. The evidence is in VERIFICATION.md.
 
-Not built yet, and not a change to the contract: the `401` that `openapi.yaml` documents on every partner endpoint (missing `X-API-Key`). Key checking is the Week 9 task (R4), so until then these GETs answer without a key.
+Not built yet when these GETs were first verified, and not a change to the contract: the `401` that `openapi.yaml` documents on every partner endpoint (missing `X-API-Key`). **Update: built since (R4).** Every partner endpoint now answers `401 { "message": "Send your partner key as X-API-Key" }` without a valid key, and `npm run verify` and `__tests__/partnerKeys.test.ts` prove it for all seven operations.
 
 TODO (the team): confirm that `openapi.yaml` 0.1.0 is the version handed off to Sherehe. If it is, finish this section with "No deviations: every GET matched the contract as handed off." If the handed-off version differs, list each difference below in the entry format at the end of this file.
 
@@ -17,7 +17,7 @@ Endpoints 4, 6 and 7 (`POST /api/bookings`, `PUT /api/bookings/{bookingId}`, `DE
 **Found while building**
 
 - **`413` was not documented.** A body over 20 KB answers `413 { "message": "Request body must be 20 KB or less" }` on `POST`, `PUT` and `PATCH`, and the README's error table lists 413, but `openapi.yaml` 0.1.0 documented no 413. Fixed in 0.1.1 (see "After handoff" below), and `npm run verify` now checks it.
-- **The `401` is still not enforced**, as under Week 5: partner key checking is Week 9.
+- **The `401` was not enforced yet**, as under Week 5. It is now (see the update under Week 5).
 
 **Rules the contract left open, now written into the contract's descriptions in 0.1.1**
 

@@ -1,7 +1,6 @@
-import request from 'supertest';
 import { CATEGORIES } from '@/lib/db/types';
 import { KENYA_COUNTIES } from '@/lib/validation';
-import { startServer, type TestServer } from './helpers/server';
+import { partner, startServer, type TestServer } from './helpers/server';
 import { expectErrorBody, expectKeys, ISO_SECONDS } from './helpers/shapes';
 
 let app: TestServer;
@@ -29,7 +28,7 @@ function expectCourseShape(course: Record<string, unknown>) {
 
 describe('GET /api/courses', () => {
   it('lists every course as a bare array with the contract shape', async () => {
-    const res = await request(app.server).get('/api/courses');
+    const res = await partner(app).get('/api/courses');
     expect(res.status).toBe(200);
     expect(res.type).toBe('application/json');
     expect(Array.isArray(res.body)).toBe(true);
@@ -38,7 +37,7 @@ describe('GET /api/courses', () => {
   });
 
   it('returns the contract example course exactly', async () => {
-    const res = await request(app.server).get('/api/courses');
+    const res = await partner(app).get('/api/courses');
     expect(res.body[0]).toEqual({
       id: 'crs_501',
       title: 'Food hygiene and event service',
@@ -54,7 +53,7 @@ describe('GET /api/courses', () => {
   });
 
   it('filters by category', async () => {
-    const res = await request(app.server).get('/api/courses?category=catering');
+    const res = await partner(app).get('/api/courses?category=catering');
     expect(res.status).toBe(200);
     expect(ids(res.body)).toEqual(['crs_501']);
   });
@@ -64,20 +63,20 @@ describe('GET /api/courses', () => {
     ['kiambu', ['crs_505', 'crs_506', 'crs_507']],
     ['MOMBASA', ['crs_508', 'crs_509']],
   ])('filters by county %s, ignoring case, and answers the official spelling', async (county, expected) => {
-    const res = await request(app.server).get(`/api/courses?county=${county}`);
+    const res = await partner(app).get(`/api/courses?county=${county}`);
     expect(res.status).toBe(200);
     expect(ids(res.body)).toEqual(expected);
     for (const course of res.body) expect(course.county).toBe(KENYA_COUNTIES.find((c) => c.toLowerCase() === county.toLowerCase()));
   });
 
   it('combines category and county', async () => {
-    const res = await request(app.server).get('/api/courses?category=plumbing&county=Nairobi');
+    const res = await partner(app).get('/api/courses?category=plumbing&county=Nairobi');
     expect(ids(res.body)).toEqual(['crs_503']);
   });
 
   it('answers [] with 200 when nothing matches, including a real county with no courses', async () => {
     for (const query of ['category=plumbing&county=Mombasa', 'county=Lamu']) {
-      const res = await request(app.server).get(`/api/courses?${query}`);
+      const res = await partner(app).get(`/api/courses?${query}`);
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
     }
@@ -91,13 +90,13 @@ describe('GET /api/courses', () => {
     ['an empty county', 'county=', /county must be one of Kenya's 47 counties/],
     ['a category given twice', 'category=catering&category=events', /category may only be given once/],
   ])('answers 400 { message } for %s', async (_name, query, message) => {
-    const res = await request(app.server).get(`/api/courses?${query}`);
+    const res = await partner(app).get(`/api/courses?${query}`);
     expect(res.status).toBe(400);
     expectErrorBody(res.body, message);
   });
 
   it('ignores a query parameter it does not know', async () => {
-    const res = await request(app.server).get('/api/courses?colour=green');
+    const res = await partner(app).get('/api/courses?colour=green');
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(9);
   });
@@ -105,20 +104,20 @@ describe('GET /api/courses', () => {
 
 describe('GET /api/courses/{courseId}', () => {
   it('returns one course with the contract shape', async () => {
-    const res = await request(app.server).get('/api/courses/crs_503');
+    const res = await partner(app).get('/api/courses/crs_503');
     expect(res.status).toBe(200);
     expectCourseShape(res.body);
     expect(res.body).toMatchObject({ id: 'crs_503', category: 'plumbing', county: 'Nairobi', area: 'Hurlingham', certificateLevel: 'grade-III' });
   });
 
   it('answers 404 { message } for an unknown id', async () => {
-    const res = await request(app.server).get('/api/courses/crs_999');
+    const res = await partner(app).get('/api/courses/crs_999');
     expect(res.status).toBe(404);
     expectErrorBody(res.body, 'Course crs_999 not found');
   });
 
   it('answers 404, not a crash, for an id that is not even shaped like ours', async () => {
-    const res = await request(app.server).get('/api/courses/' + encodeURIComponent("1'; DROP TABLE courses;--"));
+    const res = await partner(app).get('/api/courses/' + encodeURIComponent("1'; DROP TABLE courses;--"));
     expect(res.status).toBe(404);
     expectErrorBody(res.body);
   });

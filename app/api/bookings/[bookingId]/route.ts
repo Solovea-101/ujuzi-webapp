@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { requirePartner } from '@/lib/auth/guards';
 import { getStore } from '@/lib/db';
 import type { BookingOutcome } from '@/lib/db/types';
 import { fail, guarded, json, noContent, readJson } from '@/lib/http';
@@ -16,8 +17,10 @@ function refused(outcome: Exclude<BookingOutcome, { kind: 'ok' }>, bookingId: st
 }
 
 // Endpoint 5 (S4): GET /api/bookings/{bookingId}
-export async function GET(_req: NextRequest, { params }: Context) {
+export async function GET(req: NextRequest, { params }: Context) {
   return guarded(async () => {
+    const guard = requirePartner(req);
+    if (!guard.ok) return guard.response;
     const { bookingId } = await params;
     const row = await (await getStore()).getBooking(bookingId);
     if (!row) return fail(404, `Booking ${bookingId} not found`);
@@ -29,6 +32,8 @@ export async function GET(_req: NextRequest, { params }: Context) {
 // is sent, so sending the same body twice leaves the same booking.
 export async function PUT(req: NextRequest, { params }: Context) {
   return guarded(async () => {
+    const guard = requirePartner(req);
+    if (!guard.ok) return guard.response;
     const { bookingId } = await params;
     const parsed = await readJson(req);
     if (!parsed.ok) return parsed.response;
@@ -42,8 +47,10 @@ export async function PUT(req: NextRequest, { params }: Context) {
 }
 
 // Endpoint 7 (S5): DELETE /api/bookings/{bookingId}. A cancelled booking no longer exists.
-export async function DELETE(_req: NextRequest, { params }: Context) {
+export async function DELETE(req: NextRequest, { params }: Context) {
   return guarded(async () => {
+    const guard = requirePartner(req);
+    if (!guard.ok) return guard.response;
     const { bookingId } = await params;
     const outcome = await (await getStore()).deleteBooking(bookingId);
     if (outcome.kind !== 'ok') return refused(outcome, bookingId, 'cancelled');
