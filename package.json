@@ -14,7 +14,8 @@
     "types": "openapi-typescript openapi.yaml -o types/api.d.ts && openapi-typescript partner-tests/kazi_openapi.yaml -o types/kazi.d.ts",
     "verify": "next build && NODE_ENV=production tsx scripts/verifyContract.ts",
     "test": "next build && jest --runInBand",
-    "db:migrate": "tsx lib/db/migrate.ts"
+    "db:migrate": "tsx lib/db/migrate.ts",
+    "db:seed": "tsx lib/db/seedData.ts"
   },
   "dependencies": {
     "@next/env": "^16.4.2",
@@ -33,6 +34,8 @@
     "@types/react-dom": "^19.3.0",
     "@types/supertest": "^7.2.1",
     "@types/ws": "^8.18.2",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "jest": "^30.5.2",
     "openapi-typescript": "^7.13.0",
     "supertest": "^7.3.1",

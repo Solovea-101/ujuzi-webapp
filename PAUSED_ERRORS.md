@@ -11,9 +11,9 @@ Entries are copied from real runs only: the command, the status and body as rece
 
 | System | Signal that its part is ready | Baseline when this file was created (2026-10-20) | Now |
 |---|---|---|---|
-| Kazi Connect | Live `openapi.yaml` `info.version` moves from 1.2.1 (1.3.0 adds endpoints 22-25 only), and endpoints 1-9 answer as the contract says | 1.2.1, identical to `partner-tests/kazi_openapi.yaml` | TODO |
+| Kazi Connect | Live `openapi.yaml` `info.version` moves from 1.2.1 (1.3.0 adds endpoints 22-25 only), and endpoints 1-9 answer as the contract says | 1.2.1, identical to `partner-tests/kazi_openapi.yaml` | Still 1.2.1 when last checked, 2026-10-20. `GET /api/jobs?status=active` answered 200 with 9 jobs, after a 23 s wake-up. |
 | Sherehe | Sherehe's live URL is known and it has handed us its contract | TODO: URL from the humans | TODO |
-| Ujuzi | Our own endpoints exist, so partners can call them | Phase 0 only: no partner endpoints yet | TODO |
+| Ujuzi | Our own endpoints exist, so partners can call them | Phase 0 only: no partner endpoints yet | Endpoints 1, 2, 3, 5 (the GETs) built and verified; 4, 6, 7 and PATCH (writes) not built; partner key checking (Week 9) not built. See VERIFICATION.md. |
 
 ## Entries
 
@@ -26,4 +26,4 @@ Format for each entry:
 - Re-check with: the exact command to run again
 - Status: paused / re-run on DATE: still failing (genuine) / re-run on DATE: passes (was a missing component)
 
-No entries yet: nothing has failed during Phase 0.
+No entries yet: nothing seen so far has been caused by a missing partner part.

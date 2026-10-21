@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { classifyProbe, parseContract } from '@/scripts/verifyContract';
+import { bodyProblems, classifyProbe, countFields, parseContract, responseCheck, strictify } from '@/scripts/verifyContract';
 
 const contract = (paths: string) => `openapi: 3.0.3\ninfo: { title: T, version: 1.0.0 }\npaths:\n${paths}`;
 
@@ -84,9 +84,99 @@ describe('classifyProbe', () => {
     }
   });
 
+  it('calls 405 pending: the route file exists but does not export that method yet', () => {
+    expect(classifyProbe(405, undefined)).toEqual({ kind: 'pending', note: 'method not built yet' });
+  });
+
   it('calls 502 built (Kazi unreachable is documented containment) but any other 5xx failed', () => {
     expect(classifyProbe(502, { message: 'Kazi Connect could not be reached' }).kind).toBe('built');
     expect(classifyProbe(500, { message: 'Internal server error' }).kind).toBe('failed');
     expect(classifyProbe(503, undefined).kind).toBe('failed');
+  });
+});
+
+describe('field-by-field checking against the real contract', () => {
+  const contract = parseContract(readFileSync(path.join(__dirname, '..', 'openapi.yaml'), 'utf8'));
+  const check = (key: string, status: string) => {
+    const operation = contract.operations.find((o) => o.key === key);
+    if (!operation) throw new Error(`no operation ${key}`);
+    return responseCheck(contract, operation, status);
+  };
+  const course = {
+    id: 'crs_501',
+    title: 'Food hygiene and event service',
+    category: 'catering',
+    centre: { id: 'cen_11', name: 'Westlands Skills Centre' },
+    county: 'Nairobi',
+    area: 'Westlands',
+    durationWeeks: 2,
+    feeKes: 3500,
+    nextStart: '2026-11-23T07:00:00Z',
+    certificateLevel: 'short-course',
+  };
+  const oneCourse = check('GET /api/courses/{courseId}', '200');
+  const problems = (body: unknown) => bodyProblems(oneCourse, body).join(' | ');
+
+  it('accepts a body that matches the contract exactly', () => {
+    expect(bodyProblems(oneCourse, course)).toEqual([]);
+  });
+
+  it('rejects a field the contract does not declare, at the top level and nested', () => {
+    expect(problems({ ...course, colour: 'green' })).toMatch(/must NOT have additional properties "colour"/);
+    expect(problems({ ...course, centre: { ...course.centre, phone: '0700' } })).toMatch(/body\.centre: .*"phone"/);
+  });
+
+  it('rejects a declared field that is missing', () => {
+    const { area, ...withoutArea } = course;
+    void area;
+    expect(problems(withoutArea)).toMatch(/body: must have required property 'area'$/);
+  });
+
+  it('rejects a wrong type, a value outside the enum, and a non-integer', () => {
+    expect(problems({ ...course, feeKes: '3500' })).toMatch(/body\.feeKes: must be integer/);
+    expect(problems({ ...course, category: 'cooking' })).toMatch(/body\.category: must be equal to one of the allowed values/);
+    expect(problems({ ...course, durationWeeks: 2.5 })).toMatch(/body\.durationWeeks: must be integer/);
+  });
+
+  it('rejects a date-time with milliseconds, with an offset, or that is not a date', () => {
+    for (const nextStart of ['2026-11-23T07:00:00.000Z', '2026-11-23T10:00:00+03:00', '2026-11-23', 'soon']) {
+      expect(problems({ ...course, nextStart })).toMatch(/body\.nextStart/);
+    }
+  });
+
+  it('checks every item of an array', () => {
+    const list = check('GET /api/courses', '200');
+    expect(bodyProblems(list, [])).toEqual([]);
+    expect(bodyProblems(list, [course, course])).toEqual([]);
+    expect(bodyProblems(list, [course, { ...course, extra: 1 }]).join()).toMatch(/body\.1: .*"extra"/);
+    expect(bodyProblems(list, { not: 'an array' }).join()).toMatch(/must be array/);
+  });
+
+  it('holds error bodies to exactly { message }', () => {
+    const notFound = check('GET /api/courses/{courseId}', '404');
+    expect(bodyProblems(notFound, { message: 'Course crs_999 not found' })).toEqual([]);
+    expect(bodyProblems(notFound, { message: 'x', code: 404 }).join()).toMatch(/"code"/);
+    expect(bodyProblems(notFound, { error: 'x' }).join()).toMatch(/required property 'message'/);
+    expect(bodyProblems(notFound, undefined)).toEqual(['the contract documents a body, but it was empty']);
+  });
+
+  it('expects no body where the contract documents none', () => {
+    const cancelled = check('DELETE /api/bookings/{bookingId}', '204');
+    expect(bodyProblems(cancelled, undefined)).toEqual([]);
+    expect(bodyProblems(cancelled, { message: 'x' })).toEqual(['the contract documents no body, but one was sent']);
+  });
+
+  it('strictify leaves examples alone and makes a date-time pattern', () => {
+    const out = strictify({ type: 'object', properties: { at: { type: 'string', format: 'date-time', example: '2026-01-01T00:00:00Z' } } });
+    expect(out).toMatchObject({ additionalProperties: false, required: ['at'] });
+    expect((out.properties as Record<string, { example: string; pattern: string }>).at.example).toBe('2026-01-01T00:00:00Z');
+    expect((out.properties as Record<string, { pattern: string }>).at.pattern).toMatch(/Z\$$/);
+  });
+
+  it('counts the fields of a body, including nested ones and every array item', () => {
+    expect(countFields(course)).toBe(12);
+    expect(countFields([course, course])).toBe(24);
+    expect(countFields([])).toBe(0);
+    expect(countFields(undefined)).toBe(0);
   });
 });

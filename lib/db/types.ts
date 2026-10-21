@@ -43,6 +43,8 @@ export function formatCertificateNo(year: number, n: number): string {
   return `UJZ-${year}-${String(n).padStart(5, '0')}`;
 }
 
+export const CERTIFICATE_NO_PATTERN = /^UJZ-\d{4}-\d{5}$/;
+
 // ---- Row types: snake_case, exactly the columns in 001_init.sql ----------------------------------
 // timestamptz columns are Date objects; the `date` column issued_on is a 'YYYY-MM-DD' string.
 
@@ -139,8 +141,11 @@ export type NewCourse = Omit<CourseRow, 'id'>;
 export type NewUser = Omit<UserRow, 'id' | 'created_at'>;
 export type NewSession = Omit<SessionRow, 'created_at'>;
 export type NewEnrolment = Pick<EnrolmentRow, 'graduate_id' | 'course_id'>;
-/** course_title and level are copied from the course by the caller, at the moment of issue. */
-export type NewCertificate = Omit<CertificateRow, 'certificate_no' | 'revoked_at'>;
+/**
+ * course_title and level are copied from the course by the caller, at the moment of issue.
+ * Leave certificate_no out and the next free number is issued; seed data names its own.
+ */
+export type NewCertificate = Omit<CertificateRow, 'certificate_no' | 'revoked_at'> & { certificate_no?: string };
 export type NewBooking = Pick<BookingRow, 'course_id' | 'event_name' | 'crew_size' | 'preferred_start'>;
 export type BookingChange = Pick<BookingRow, 'crew_size' | 'preferred_start'>;
 export type NewKaziApplication = Pick<
@@ -179,7 +184,7 @@ export type BookingOutcome =
  * PostgreSQL store when DATABASE_URL is set and the in-memory store otherwise; both must behave
  * identically. Rules every implementation follows:
  *   - get* methods answer undefined when nothing matches; list* methods answer [] and never undefined.
- *   - lists come back in creation order.
+ *   - lists come back in id order, which is creation order; certificates by certificate number.
  *   - rows returned are copies; changing one never changes what is stored.
  *   - a write that breaks a uniqueness rule throws StoreConflictError; one that points at a missing
  *     row throws StoreReferenceError.
@@ -209,10 +214,12 @@ export interface Store {
   getEnrolment(id: string): Promise<EnrolmentRow | undefined>;
   listEnrolments(graduateId: string): Promise<EnrolmentRow[]>;
 
-  // Certificates (issuing twice for one enrolment is a StoreConflictError)
+  // Certificates (issuing twice for one enrolment, or reusing a number, is a StoreConflictError)
   createCertificate(input: NewCertificate): Promise<CertificateRow>;
   getCertificate(certificateNo: string): Promise<CertificateDetailRow | undefined>;
   listCertificates(graduateId: string): Promise<CertificateRow[]>;
+  /** Marks a certificate revoked (valid: false from then on). Revoking twice keeps the first date. */
+  revokeCertificate(certificateNo: string): Promise<CertificateRow | undefined>;
 
   // Bookings (only pending bookings can change or be cancelled)
   createBooking(input: NewBooking): Promise<BookingRow>;

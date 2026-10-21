@@ -17,6 +17,19 @@ export function noContent(): NextResponse<null> {
   return new NextResponse(null, { status: 204 });
 }
 
+/**
+ * Runs a handler's work and turns anything it throws into our own 500 { message }. Without this,
+ * Next answers an unexpected error with an empty body, and every error must be { "message": "..." }.
+ */
+export async function guarded(work: () => Promise<NextResponse>): Promise<NextResponse> {
+  try {
+    return await work();
+  } catch (err) {
+    console.error(err);
+    return fail(500, 'Something went wrong on our side. Please try again.');
+  }
+}
+
 export type JsonBody<T> = { ok: true; body: T } | { ok: false; response: NextResponse<ErrorBody> };
 
 /**
