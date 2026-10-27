@@ -190,6 +190,28 @@ describe('following an application live', () => {
   });
 });
 
+describe('a status is announced once, even when two sources report it at the same moment', () => {
+  it('records and pushes it once when the route and the subscriber race', async () => {
+    const feed = await openFeed(SEEDED.achieng);
+    const id = await apply(SEEDED.achieng);
+    subscriber().stopAll();
+    const store = await getStore();
+    const results = await Promise.all(Array.from({ length: 6 }, () => recordStatus(store, id, 'cancelled')));
+    expect(results.filter(Boolean)).toHaveLength(1);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(feed.events).toEqual([{ applicationId: id, status: 'cancelled', updatedAt: expect.any(String) }]);
+  });
+
+  it('keeps the first decision when different statuses race', async () => {
+    const id = await apply(SEEDED.achieng);
+    subscriber().stopAll();
+    const store = await getStore();
+    const results = await Promise.all([recordStatus(store, id, 'accepted'), recordStatus(store, id, 'filled'), recordStatus(store, id, 'cancelled')]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(['accepted', 'filled', 'cancelled']).toContain(await rowStatus(id));
+  });
+});
+
 describe('a status never goes backwards', () => {
   it('ignores a later status once an application is decided', async () => {
     const id = await apply(SEEDED.achieng);

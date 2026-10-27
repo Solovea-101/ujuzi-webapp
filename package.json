@@ -16,7 +16,9 @@
     "test": "next build && jest --runInBand",
     "db:migrate": "tsx lib/db/migrate.ts",
     "db:seed": "tsx lib/db/seedData.ts",
-    "key:issue": "tsx scripts/issuePartnerKey.ts"
+    "key:issue": "tsx scripts/issuePartnerKey.ts",
+    "test:partner": "jest --runInBand --testMatch '<rootDir>/partner-tests/**/*.test.ts'",
+    "ring:check": "tsx scripts/ringCheck.ts"
   },
   "dependencies": {
     "@next/env": "^16.4.2",

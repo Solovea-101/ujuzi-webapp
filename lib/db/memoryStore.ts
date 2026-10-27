@@ -17,6 +17,7 @@ import {
   type IdKind,
   type KaziApplicationChange,
   type KaziApplicationRow,
+  type KaziApplicationStatus,
   type NewBooking,
   type NewCentre,
   type NewCertificate,
@@ -338,9 +339,10 @@ export class MemoryStore implements Store {
   async updateKaziApplication(
     applicationId: string,
     change: KaziApplicationChange,
+    onlyIfStatus?: KaziApplicationStatus,
   ): Promise<KaziApplicationRow | undefined> {
     const row = this.kaziApplications.get(applicationId);
-    if (!row) return undefined;
+    if (!row || (onlyIfStatus !== undefined && row.status !== onlyIfStatus)) return undefined;
     if (change.preferred_date !== undefined) row.preferred_date = new Date(change.preferred_date);
     if (change.note !== undefined) row.note = change.note;
     if (change.status !== undefined) row.status = change.status;
