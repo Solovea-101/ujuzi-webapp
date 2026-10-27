@@ -307,3 +307,41 @@ export function parseCourseDetails(body: unknown, now = Date.now()): Valid<Omit<
     },
   };
 }
+
+// ---- Kazi applications ---------------------------------------------------------------------------
+
+export interface ApplicationInput {
+  jobId?: string;
+  preferredDate: Date;
+  note: string;
+}
+
+function noteField(value: unknown): Valid<string> {
+  if (value === undefined) return { ok: true, value: '' };
+  if (typeof value !== 'string' || value.length > 500) return { ok: false, message: 'note must be text of up to 500 characters' };
+  return { ok: true, value: value.trim() };
+}
+
+/** POST /api/me/applications: jobId and preferredDate, and an optional note. */
+export function parseNewApplication(body: unknown, now = Date.now()): Valid<ApplicationInput & { jobId: string }> {
+  const fields = objectWithFields(body, ['jobId', 'preferredDate', 'note'], ['jobId', 'preferredDate']);
+  if (!fields.ok) return fields;
+  const jobId = idField('jobId', 'job_12345', fields.value.jobId);
+  if (!jobId.ok) return jobId;
+  const date = futureDateTime('preferredDate', fields.value.preferredDate, now);
+  if (!date.ok) return date;
+  const note = noteField(fields.value.note);
+  if (!note.ok) return note;
+  return { ok: true, value: { jobId: jobId.value, preferredDate: date.value, note: note.value } };
+}
+
+/** PUT /api/me/applications/{id}: sets preferredDate and note; leaving note out clears it. */
+export function parseApplicationUpdate(body: unknown, now = Date.now()): Valid<ApplicationInput> {
+  const fields = objectWithFields(body, ['preferredDate', 'note'], ['preferredDate']);
+  if (!fields.ok) return fields;
+  const date = futureDateTime('preferredDate', fields.value.preferredDate, now);
+  if (!date.ok) return date;
+  const note = noteField(fields.value.note);
+  if (!note.ok) return note;
+  return { ok: true, value: { preferredDate: date.value, note: note.value } };
+}

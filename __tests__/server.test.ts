@@ -49,14 +49,20 @@ describe('createServer', () => {
 describe('WebSocket upgrade hook', () => {
   const open = (path: string) => new WebSocket(`ws://127.0.0.1:${app.port}${path}`);
 
-  it('accepts an upgrade on the feed path', async () => {
+  it('accepts an upgrade on the feed path, and closes a socket that does not authenticate with 4401', async () => {
     const ws = open('/api/me/applications/feed');
-    const closed = await new Promise<number>((resolve, reject) => {
-      ws.on('close', resolve);
+    await new Promise<void>((resolve, reject) => {
+      ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', token: 'not-a-token' })));
       ws.on('error', reject);
+      ws.on('close', (code) => {
+        try {
+          expect(code).toBe(4401);
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      });
     });
-    // The feed itself is a later phase: for now the socket upgrades, then closes with 1011.
-    expect(closed).toBe(1011);
   });
 
   it('refuses an upgrade on any other path', async () => {
