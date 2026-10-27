@@ -1,5 +1,6 @@
 import type { components } from '@/types/api';
-import type { BookingRow, CertificateDetailRow, CourseDetailRow, EnrolmentRow, UserRow } from '@/lib/db/types';
+import type { KaziJob } from '@/lib/clients/kaziClient';
+import type { BookingRow, CertificateDetailRow, CourseDetailRow, EnrolmentRow, KaziApplicationRow, UserRow } from '@/lib/db/types';
 
 // The return types come from the generated contract, so a change to openapi.yaml that these
 // mappers do not follow fails `npm run typecheck`.
@@ -9,6 +10,8 @@ export type Booking = components['schemas']['Booking'];
 export type User = components['schemas']['User'];
 export type AuthResponse = components['schemas']['AuthResponse'];
 export type Enrolment = components['schemas']['Enrolment'];
+export type JobMatch = components['schemas']['JobMatch'];
+export type Application = components['schemas']['Application'];
 
 /** ISO 8601 UTC with a Z and no milliseconds: 2026-11-23T07:00:00Z. */
 export function isoSeconds(date: Date): string {
@@ -65,4 +68,29 @@ export function toUser(row: UserRow): User {
 
 export function toEnrolment(row: EnrolmentRow, courseTitle: string, certificateNo: string | null): Enrolment {
   return { id: row.id, courseId: row.course_id, courseTitle, enrolledAt: isoSeconds(row.enrolled_at), certificateNo };
+}
+
+/** Kazi's Job as Ujuzi shows it: pay as whole shillings (the shared money rule), and the job's id as jobId. */
+export function toJobMatch(job: KaziJob, category: JobMatch['category']): JobMatch {
+  return {
+    jobId: job.id,
+    title: job.title,
+    category,
+    county: job.county,
+    area: job.area,
+    duration: job.duration,
+    urgent: job.urgent,
+    payRange: { minKes: Math.round(job.payRange.min), maxKes: Math.round(job.payRange.max) },
+  };
+}
+
+export function toApplication(row: KaziApplicationRow): Application {
+  return {
+    applicationId: row.application_id,
+    jobId: row.job_id,
+    preferredDate: isoSeconds(row.preferred_date),
+    note: row.note,
+    status: row.status,
+    createdAt: isoSeconds(row.created_at),
+  };
 }

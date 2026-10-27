@@ -8,6 +8,7 @@ import addFormats from 'ajv-formats';
 import { parse } from 'yaml';
 import { hashKey } from '../lib/auth/partnerKey';
 import { DEMO_PASSWORD } from '../lib/db/seedData';
+import { startKaziStub, type KaziStub } from '../__tests__/helpers/kaziStub';
 import { CASES, type Auth, type VerifyCase } from './verifyCases';
 
 /**
@@ -19,9 +20,9 @@ import { CASES, type Auth, type VerifyCase } from './verifyCases';
  *      contract promises, and the body must match the contract field by field: exact field names
  *      (none missing, none extra), types, enums, and date-times as UTC with a Z and no milliseconds.
  *
- * Pending operations do not fail a run yet; `npm run verify -- --strict` makes them fail, and that
- * is the flag to turn on when the last endpoint is built. Write cases that re-fetch each change
- * (Week 6) belong in verifyCases.ts and the case runner below.
+ * `npm run verify` runs with --strict now that every operation is built: an operation the contract lists
+ * but the app does not answer fails the run. (Without --strict, pending operations are only reported.)
+ * Cases that re-fetch each change live in verifyCases.ts and the case runner below.
  */
 
 const ROOT = path.resolve(__dirname, '..');
@@ -275,6 +276,8 @@ interface RunContext {
   /** Login tokens by who they belong to, made on first use. */
   tokens: Map<string, string>;
   hasUser: (email: string) => Promise<boolean>;
+  /** The stub Kazi Connect verify runs; never the real one. */
+  kazi: KaziStub;
 }
 
 /** The seeded people a case can log in as (lib/db/seedData.ts). They all use DEMO_PASSWORD. */
@@ -406,12 +409,24 @@ async function runCase(ctx: RunContext, operation: Operation, c: VerifyCase): Pr
 
   const sent = c.rawBody ?? (c.body !== undefined ? JSON.stringify(c.body) : undefined);
   const bookingsBefore = c.noNewBooking ? await ctx.countBookings() : undefined;
-  const main = await exchange(ctx, operation, filled.text, c.status, sent, c.as ?? defaultAuth(operation));
+  if (c.kaziDown) await ctx.kazi.down();
+  let main: Exchange;
+  try {
+    main = await exchange(ctx, operation, filled.text, c.status, sent, c.as ?? defaultAuth(operation));
+  } finally {
+    if (c.kaziDown) await ctx.kazi.up();
+  }
   result.got = main.status;
   result.fields = main.fields;
   result.problems.push(...main.problems);
 
   if (c.fields) result.problems.push(...fieldProblems(main.body, c.fields));
+  if (c.includes) {
+    const items: unknown[] = Array.isArray(main.body) ? main.body : [];
+    if (!items.some((item) => fieldProblems(item, c.includes!).length === 0)) {
+      result.problems.push(`no item of the list has ${JSON.stringify(c.includes)}`);
+    }
+  }
   for (const [name, pattern] of Object.entries(c.headers ?? {})) {
     const value = main.headers.get(name);
     if (value === null || !pattern.test(value)) result.problems.push(`header ${name} is ${JSON.stringify(value)}, which does not match ${pattern}`);
@@ -541,8 +556,9 @@ async function main(): Promise<number> {
   if (contract) {
     // Tests and verify never use a developer's database or the live Kazi.
     process.env.DATABASE_URL = '';
-    process.env.KAZI_API_URL = 'http://127.0.0.1:9';
-    process.env.KAZI_WS_URL = 'ws://127.0.0.1:9';
+    const kazi = await startKaziStub();
+    process.env.KAZI_API_URL = kazi.url;
+    process.env.KAZI_WS_URL = kazi.wsUrl;
     // Only the hash of this key is configured, exactly as in production.
     process.env.PARTNER_KEYS = hashKey(VERIFY_PARTNER_KEY);
     // Fixed settings, so a developer's own environment cannot change what verify sees.
@@ -565,6 +581,7 @@ async function main(): Promise<number> {
         operations: new Map(contract.operations.map((o) => [o.key, o])),
         vars: new Map(),
         partnerKey: VERIFY_PARTNER_KEY,
+        kazi,
         tokens: new Map(),
         hasUser: async (email) => (await (await getStore()).getUserByEmail(email)) !== undefined,
         // The server runs in this process and shares its store, so a rejected POST can be shown to have created nothing.
@@ -585,6 +602,7 @@ async function main(): Promise<number> {
       }
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      await kazi.close();
     }
 
     const pending = probes.filter((p) => p.kind === 'pending').map((p) => p.operation);

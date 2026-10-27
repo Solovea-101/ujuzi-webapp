@@ -1,8 +1,14 @@
 import { createServer as createHttpServer, type IncomingMessage, type Server } from 'node:http';
+import type { Duplex } from 'node:stream';
 import { loadEnvConfig } from '@next/env';
 import next from 'next';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { getStore } from './lib/db';
+import { userForToken } from './lib/auth/session';
 import { prepareDatabase } from './lib/db/startup';
+import { installRealtime } from './lib/realtime/hooks';
+import { registerFeedClient } from './lib/realtime/graduateFeed';
+import { getSubscriber } from './lib/realtime/kaziSubscriber';
 
 /** Route handlers cannot accept WebSocket upgrades, so this one path is served from here. */
 export const FEED_PATH = '/api/me/applications/feed';
@@ -11,10 +17,32 @@ export const FEED_PATH = '/api/me/applications/feed';
 // Jest sets test. Tests run against the production build that `next build` just made.
 const isDev = () => process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test';
 
+const FEED_AUTH_SECONDS = 5;
+
+/**
+ * The feed is authenticated by its first message, {"type":"auth","token":"..."}, because a browser cannot
+ * set headers on a WebSocket and a token in the URL would end up in logs. A missing, late or bad token, or a
+ * staff token, closes the socket with code 4401. After that the graduate gets one FeedEvent per change.
+ */
 function onFeedConnection(ws: WebSocket, _req: IncomingMessage): void {
-  // TODO(realtime phase): authenticate the graduate and register the socket with
-  // lib/realtime/graduateFeed. Until then the upgrade works and the socket closes at once.
-  ws.close(1011, 'The applications feed is not available yet');
+  const timer = setTimeout(() => ws.close(4401, `Send {"type":"auth","token":"..."} within ${FEED_AUTH_SECONDS} seconds`), FEED_AUTH_SECONDS * 1000);
+  ws.once('message', (data) => {
+    clearTimeout(timer);
+    void (async () => {
+      try {
+        const message: unknown = JSON.parse(data.toString());
+        const token = typeof message === 'object' && message !== null && (message as { type?: unknown }).type === 'auth' ? (message as { token?: unknown }).token : undefined;
+        const user = typeof token === 'string' ? await userForToken(await getStore(), token) : undefined;
+        if (!user || user.role !== 'graduate') return ws.close(4401, 'Log in as a graduate and send your token');
+        registerFeedClient(user.id, ws);
+        ws.send(JSON.stringify({ type: 'ready' }));
+      } catch {
+        ws.close(4401, 'Send {"type":"auth","token":"..."}');
+      }
+    })();
+  });
+  ws.on('error', () => clearTimeout(timer));
+  ws.on('close', () => clearTimeout(timer));
 }
 
 /**
@@ -42,8 +70,10 @@ export function createServer(): Server {
     }
   });
 
-  const feed = new WebSocketServer({ noServer: true });
-  server.on('upgrade', (req, socket, head) => {
+  const feed = new WebSocketServer({ noServer: true, maxPayload: 4096 });
+  const subscriber = getSubscriber();
+  installRealtime(subscriber);
+  const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     const { pathname } = new URL(req.url ?? '/', 'http://localhost');
     if (pathname === FEED_PATH) {
       feed.handleUpgrade(req, socket, head, (ws) => onFeedConnection(ws, req));
@@ -53,9 +83,20 @@ export function createServer(): Server {
     } else {
       socket.destroy();
     }
-  });
+  };
+  // Ujuzi owns the 'upgrade' event. On its first request Next adds an upgrade listener of its own to this
+  // server, and that one closes any socket it does not recognise, including the feed. So 'upgrade' is not
+  // dispatched to listeners at all: onUpgrade runs, and calls Next itself where Next should be asked.
+  const emit = server.emit.bind(server);
+  server.emit = ((event: string | symbol, ...args: unknown[]) => {
+    if (event !== 'upgrade') return emit(event, ...args);
+    onUpgrade(...(args as [IncomingMessage, Duplex, Buffer]));
+    return true;
+  }) as typeof server.emit;
 
   server.on('close', () => {
+    subscriber.stopAll();
+    installRealtime(undefined);
     feed.close();
     void app.close();
   });
@@ -71,8 +112,11 @@ async function main(): Promise<void> {
 
   server.listen(port, () => {
     console.log(`Ujuzi listening on http://localhost:${port} (${isDev() ? 'development' : 'production'})`);
-    // TODO(realtime phase): reopen a Kazi subscription for every pending application
-    // (lib/realtime/kaziSubscriber) now that the server is up.
+    // Follow every application that was still pending when the last run stopped.
+    getSubscriber().resume().then(
+      (count) => count > 0 && console.log(`Following ${count} pending Kazi application(s)`),
+      (err) => console.error('Could not resume Kazi subscriptions:', err),
+    );
   });
 
   // Render sends SIGTERM when it replaces an instance.

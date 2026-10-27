@@ -7,8 +7,8 @@ The script starts the server with the in-memory store, sends real requests to ev
 ## Latest run
 
 - Contract: `openapi.yaml` version 0.2.0 (OpenAPI 3.0.3).
-- Operations: 18 of 24 built, 6 not built yet.
-- Cases: 127 sent, 127 passed, 0 failed.
+- Operations: 24 of 24 built, 0 not built yet.
+- Cases: 164 sent, 164 passed, 0 failed.
 - Result: **PASS**
 
 "Fields checked" counts every field in the answer that was compared with the contract for its exact name, type, allowed values and format. Dates must be UTC with a Z and no milliseconds. A field the contract does not declare, or a declared field that is missing, fails the case.
@@ -144,12 +144,44 @@ The script starts the server with the in-memory store, sends real requests to ev
 | `PATCH /api/bookings/{bookingId}` | no token: 401 | `/api/bookings/bkg_6002` | 401 | 401 | 1 |  | pass |
 | `PATCH /api/bookings/{bookingId}` | a partner key is not a login: 401 | `/api/bookings/bkg_6002` | 401 | 401 | 1 |  | pass |
 | `PATCH /api/bookings/{bookingId}` | body over 20 KB: 413 | `/api/bookings/bkg_6002` | 413 | 413 | 1 |  | pass |
+| `GET /api/courses/{courseId}/job-matches` | the active catering jobs in Nairobi | `/api/courses/crs_501/job-matches` | 200 | 200 | 20 |  | pass |
+| `GET /api/courses/{courseId}/job-matches` | another county, in lower case | `/api/courses/crs_505/job-matches?county=kiambu` | 200 | 200 | 10 |  | pass |
+| `GET /api/courses/{courseId}/job-matches` | nothing matches: [] with 200 | `/api/courses/crs_509/job-matches` | 200 | 200 | 0 |  | pass |
+| `GET /api/courses/{courseId}/job-matches` | an unknown county: 400 | `/api/courses/crs_501/job-matches?county=Narnia` | 400 | 400 | 1 |  | pass |
+| `GET /api/courses/{courseId}/job-matches` | an unknown course: 404 | `/api/courses/crs_999/job-matches` | 404 | 404 | 1 |  | pass |
+| `GET /api/courses/{courseId}/job-matches` | no token: 401 | `/api/courses/crs_501/job-matches` | 401 | 401 | 1 |  | pass |
+| `GET /api/courses/{courseId}/job-matches` | Kazi down: our own 502 | `/api/courses/crs_502/job-matches` | 502 | 502 | 1 |  | pass |
+| `POST /api/me/applications` | applies for a job at Kazi: 201, saved, in the list | `/api/me/applications` | 201 | 201 | 6 | `GET /api/me/applications -> 200` | pass |
+| `POST /api/me/applications` | a second application, to withdraw later | `/api/me/applications` | 201 | 201 | 6 |  | pass |
+| `POST /api/me/applications` | a closed job: our own 409 | `/api/me/applications` | 409 | 409 | 1 |  | pass |
+| `POST /api/me/applications` | a job Kazi does not know: our own 400 | `/api/me/applications` | 400 | 400 | 1 |  | pass |
+| `POST /api/me/applications` | no fields: 400 | `/api/me/applications` | 400 | 400 | 1 |  | pass |
+| `POST /api/me/applications` | a date in the past: 400 | `/api/me/applications` | 400 | 400 | 1 |  | pass |
+| `POST /api/me/applications` | the studentId cannot be chosen: 400 | `/api/me/applications` | 400 | 400 | 1 |  | pass |
+| `POST /api/me/applications` | a staff member cannot apply: 403 | `/api/me/applications` | 403 | 403 | 1 |  | pass |
+| `POST /api/me/applications` | no token: 401 | `/api/me/applications` | 401 | 401 | 1 |  | pass |
+| `POST /api/me/applications` | body over 20 KB: 413 | `/api/me/applications` | 413 | 413 | 1 |  | pass |
+| `POST /api/me/applications` | Kazi down: our own 502 | `/api/me/applications` | 502 | 502 | 1 |  | pass |
+| `GET /api/me/applications` | the graduate's applications | `/api/me/applications` | 200 | 200 | 12 |  | pass |
+| `GET /api/me/applications` | another graduate has none: [] with 200 | `/api/me/applications` | 200 | 200 | 0 |  | pass |
+| `GET /api/me/applications` | a staff member cannot: 403 | `/api/me/applications` | 403 | 403 | 1 |  | pass |
+| `GET /api/me/applications` | no token: 401 | `/api/me/applications` | 401 | 401 | 1 |  | pass |
+| `PUT /api/me/applications/{id}` | reschedules a pending application | `/api/me/applications/app_1005` | 200 | 200 | 6 | `GET /api/me/applications -> 200` | pass |
+| `PUT /api/me/applications/{id}` | someone else's application: 404, unchanged | `/api/me/applications/app_1005` | 404 | 404 | 1 | `GET /api/me/applications -> 200` | pass |
+| `PUT /api/me/applications/{id}` | a date in the past: 400, unchanged | `/api/me/applications/app_1005` | 400 | 400 | 1 | `GET /api/me/applications -> 200` | pass |
+| `PUT /api/me/applications/{id}` | an unknown application: 404 | `/api/me/applications/app_9999` | 404 | 404 | 1 |  | pass |
+| `PUT /api/me/applications/{id}` | a staff member cannot: 403 | `/api/me/applications/app_1005` | 403 | 403 | 1 |  | pass |
+| `PUT /api/me/applications/{id}` | no token: 401 | `/api/me/applications/app_1005` | 401 | 401 | 1 |  | pass |
+| `PUT /api/me/applications/{id}` | Kazi down: our own 502, unchanged | `/api/me/applications/app_1005` | 502 | 502 | 1 | `GET /api/me/applications -> 200` | pass |
+| `DELETE /api/me/applications/{id}` | someone else's application: 404, still there | `/api/me/applications/app_1006` | 404 | 404 | 1 | `GET /api/me/applications -> 200` | pass |
+| `DELETE /api/me/applications/{id}` | Kazi down: our own 502, still pending | `/api/me/applications/app_1006` | 502 | 502 | 1 | `GET /api/me/applications -> 200` | pass |
+| `DELETE /api/me/applications/{id}` | withdraws a pending application: 204, kept as cancelled | `/api/me/applications/app_1006` | 204 | 204 | 0 | `GET /api/me/applications -> 200` | pass |
+| `DELETE /api/me/applications/{id}` | withdrawing it again: 409 | `/api/me/applications/app_1006` | 409 | 409 | 1 |  | pass |
+| `DELETE /api/me/applications/{id}` | an unknown application: 404 | `/api/me/applications/app_9999` | 404 | 404 | 1 |  | pass |
+| `DELETE /api/me/applications/{id}` | a staff member cannot: 403 | `/api/me/applications/app_1005` | 403 | 403 | 1 |  | pass |
+| `DELETE /api/me/applications/{id}` | no token: 401 | `/api/me/applications/app_1005` | 401 | 401 | 1 |  | pass |
+| `GET /api/me/applications/feed` | plain HTTP: 426, it is a WebSocket | `/api/me/applications/feed` | 426 | 426 | 1 |  | pass |
 
 ## Not built yet
 
-- `GET /api/courses/{courseId}/job-matches`
-- `GET /api/me/applications`
-- `POST /api/me/applications`
-- `GET /api/me/applications/feed`
-- `PUT /api/me/applications/{id}`
-- `DELETE /api/me/applications/{id}`
+Every operation in the contract is built.

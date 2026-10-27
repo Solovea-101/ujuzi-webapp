@@ -40,6 +40,10 @@ export interface VerifyCase {
   capture?: Record<string, string>;
   /** Fields the answer must have, with exactly these values (other fields are checked against the contract). */
   fields?: Record<string, unknown>;
+  /** The answer is a list, and one item of it has these fields. */
+  includes?: Record<string, unknown>;
+  /** Kazi Connect is stopped for this one request (containment: our own 502, nothing changed). */
+  kaziDown?: boolean;
   /** Response headers that must match. */
   headers?: Record<string, RegExp>;
   /** The number of bookings must be the same after this request: a rejected POST created nothing. */
@@ -282,4 +286,59 @@ export const CASES: readonly VerifyCase[] = [
   { operation: 'PATCH /api/bookings/{bookingId}', name: 'no token: 401', request: '/api/bookings/bkg_6002', status: 401, as: 'none', body: { status: 'declined' } },
   { operation: 'PATCH /api/bookings/{bookingId}', name: 'a partner key is not a login: 401', request: '/api/bookings/bkg_6002', status: 401, as: 'partner', body: { status: 'declined' } },
   { operation: 'PATCH /api/bookings/{bookingId}', name: 'body over 20 KB: 413', request: '/api/bookings/bkg_6002', status: 413, as: 'westlands', body: { status: 'declined', padding: 'x'.repeat(21_000) } },
+
+  // ---- Kazi Connect through Ujuzi. verify runs a stub Kazi (the same one the tests use), never the real one.
+  { operation: 'GET /api/courses/{courseId}/job-matches', name: 'the active catering jobs in Nairobi', request: '/api/courses/crs_501/job-matches', status: 200, includes: { jobId: 'job_12345', category: 'catering', county: 'Nairobi' } },
+  { operation: 'GET /api/courses/{courseId}/job-matches', name: 'another county, in lower case', request: '/api/courses/crs_505/job-matches?county=kiambu', status: 200, includes: { jobId: 'job_12348' } },
+  { operation: 'GET /api/courses/{courseId}/job-matches', name: 'nothing matches: [] with 200', request: '/api/courses/crs_509/job-matches', status: 200 },
+  { operation: 'GET /api/courses/{courseId}/job-matches', name: 'an unknown county: 400', request: '/api/courses/crs_501/job-matches?county=Narnia', status: 400 },
+  { operation: 'GET /api/courses/{courseId}/job-matches', name: 'an unknown course: 404', request: '/api/courses/crs_999/job-matches', status: 404 },
+  { operation: 'GET /api/courses/{courseId}/job-matches', name: 'no token: 401', request: '/api/courses/crs_501/job-matches', status: 401, as: 'none' },
+  { operation: 'GET /api/courses/{courseId}/job-matches', name: 'Kazi down: our own 502', request: '/api/courses/crs_502/job-matches', status: 502, kaziDown: true },
+
+  { operation: 'POST /api/me/applications', name: 'applies for a job at Kazi: 201, saved, in the list', request: '/api/me/applications', status: 201,
+    body: { jobId: 'job_12345', preferredDate: START, note: 'After 2pm' }, headers: { location: /^\/api\/me\/applications\/app_\d+$/ },
+    fields: { applicationId: 'app_1005', jobId: 'job_12345', note: 'After 2pm', status: 'pending', preferredDate: START },
+    then: { operation: 'GET /api/me/applications', request: '/api/me/applications', status: 200, includes: { applicationId: 'app_1005', status: 'pending' } } },
+  { operation: 'POST /api/me/applications', name: 'a second application, to withdraw later', request: '/api/me/applications', status: 201, body: { jobId: 'job_12346', preferredDate: START }, fields: { applicationId: 'app_1006' } },
+  { operation: 'POST /api/me/applications', name: 'a closed job: our own 409', request: '/api/me/applications', status: 409, body: { jobId: 'job_12349', preferredDate: START } },
+  { operation: 'POST /api/me/applications', name: 'a job Kazi does not know: our own 400', request: '/api/me/applications', status: 400, body: { jobId: 'job_nope', preferredDate: START } },
+  { operation: 'POST /api/me/applications', name: 'no fields: 400', request: '/api/me/applications', status: 400, body: {} },
+  { operation: 'POST /api/me/applications', name: 'a date in the past: 400', request: '/api/me/applications', status: 400, body: { jobId: 'job_12345', preferredDate: '2020-01-01T09:00:00Z' } },
+  { operation: 'POST /api/me/applications', name: 'the studentId cannot be chosen: 400', request: '/api/me/applications', status: 400, body: { jobId: 'job_12345', preferredDate: START, studentId: 'grd_0999' } },
+  { operation: 'POST /api/me/applications', name: 'a staff member cannot apply: 403', request: '/api/me/applications', status: 403, as: 'westlands', body: { jobId: 'job_12345', preferredDate: START } },
+  { operation: 'POST /api/me/applications', name: 'no token: 401', request: '/api/me/applications', status: 401, as: 'none', body: { jobId: 'job_12345', preferredDate: START } },
+  { operation: 'POST /api/me/applications', name: 'body over 20 KB: 413', request: '/api/me/applications', status: 413, body: { jobId: 'job_12345', preferredDate: START, note: 'x'.repeat(21_000) } },
+  { operation: 'POST /api/me/applications', name: 'Kazi down: our own 502', request: '/api/me/applications', status: 502, kaziDown: true, body: { jobId: 'job_12348', preferredDate: START } },
+
+  { operation: 'GET /api/me/applications', name: 'the graduate\'s applications', request: '/api/me/applications', status: 200, includes: { applicationId: 'app_1006', status: 'pending' } },
+  { operation: 'GET /api/me/applications', name: 'another graduate has none: [] with 200', request: '/api/me/applications', status: 200, as: 'mwanaisha' },
+  { operation: 'GET /api/me/applications', name: 'a staff member cannot: 403', request: '/api/me/applications', status: 403, as: 'westlands' },
+  { operation: 'GET /api/me/applications', name: 'no token: 401', request: '/api/me/applications', status: 401, as: 'none' },
+
+  { operation: 'PUT /api/me/applications/{id}', name: 'reschedules a pending application', request: '/api/me/applications/app_1005', status: 200, body: { preferredDate: CHANGED_START },
+    fields: { applicationId: 'app_1005', preferredDate: CHANGED_START, note: '' },
+    then: { operation: 'GET /api/me/applications', request: '/api/me/applications', status: 200, includes: { applicationId: 'app_1005', preferredDate: CHANGED_START } } },
+  { operation: 'PUT /api/me/applications/{id}', name: 'someone else\'s application: 404, unchanged', request: '/api/me/applications/app_1005', status: 404, as: 'mwanaisha', body: { preferredDate: START },
+    then: { operation: 'GET /api/me/applications', request: '/api/me/applications', status: 200, includes: { applicationId: 'app_1005', preferredDate: CHANGED_START } } },
+  { operation: 'PUT /api/me/applications/{id}', name: 'a date in the past: 400, unchanged', request: '/api/me/applications/app_1005', status: 400, body: { preferredDate: '2020-01-01T09:00:00Z' },
+    then: { operation: 'GET /api/me/applications', request: '/api/me/applications', status: 200, includes: { applicationId: 'app_1005', preferredDate: CHANGED_START } } },
+  { operation: 'PUT /api/me/applications/{id}', name: 'an unknown application: 404', request: '/api/me/applications/app_9999', status: 404, body: { preferredDate: START } },
+  { operation: 'PUT /api/me/applications/{id}', name: 'a staff member cannot: 403', request: '/api/me/applications/app_1005', status: 403, as: 'westlands', body: { preferredDate: START } },
+  { operation: 'PUT /api/me/applications/{id}', name: 'no token: 401', request: '/api/me/applications/app_1005', status: 401, as: 'none', body: { preferredDate: START } },
+  { operation: 'PUT /api/me/applications/{id}', name: 'Kazi down: our own 502, unchanged', request: '/api/me/applications/app_1005', status: 502, kaziDown: true, body: { preferredDate: START },
+    then: { operation: 'GET /api/me/applications', request: '/api/me/applications', status: 200, includes: { applicationId: 'app_1005', preferredDate: CHANGED_START } } },
+
+  { operation: 'DELETE /api/me/applications/{id}', name: 'someone else\'s application: 404, still there', request: '/api/me/applications/app_1006', status: 404, as: 'mwanaisha',
+    then: { operation: 'GET /api/me/applications', request: '/api/me/applications', status: 200, includes: { applicationId: 'app_1006', status: 'pending' } } },
+  { operation: 'DELETE /api/me/applications/{id}', name: 'Kazi down: our own 502, still pending', request: '/api/me/applications/app_1006', status: 502, kaziDown: true,
+    then: { operation: 'GET /api/me/applications', request: '/api/me/applications', status: 200, includes: { applicationId: 'app_1006', status: 'pending' } } },
+  { operation: 'DELETE /api/me/applications/{id}', name: 'withdraws a pending application: 204, kept as cancelled', request: '/api/me/applications/app_1006', status: 204,
+    then: { operation: 'GET /api/me/applications', request: '/api/me/applications', status: 200, includes: { applicationId: 'app_1006', status: 'cancelled' } } },
+  { operation: 'DELETE /api/me/applications/{id}', name: 'withdrawing it again: 409', request: '/api/me/applications/app_1006', status: 409 },
+  { operation: 'DELETE /api/me/applications/{id}', name: 'an unknown application: 404', request: '/api/me/applications/app_9999', status: 404 },
+  { operation: 'DELETE /api/me/applications/{id}', name: 'a staff member cannot: 403', request: '/api/me/applications/app_1005', status: 403, as: 'westlands' },
+  { operation: 'DELETE /api/me/applications/{id}', name: 'no token: 401', request: '/api/me/applications/app_1005', status: 401, as: 'none' },
+
+  { operation: 'GET /api/me/applications/feed', name: 'plain HTTP: 426, it is a WebSocket', request: '/api/me/applications/feed', status: 426, as: 'none' },
 ];
