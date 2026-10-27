@@ -84,14 +84,30 @@ const SIGN_IN_PATHS = new Set(['/api/auth/login', '/api/auth/register']);
 /**
  * The caller's network address. server.ts writes the real peer address into x-ujuzi-peer (overwriting
  * anything the client sent). Behind a proxy that address is the proxy's, so with TRUST_PROXY=true the
- * LAST entry of X-Forwarded-For is used: the one the nearest proxy added, which a client cannot forge.
+ * client is read from X-Forwarded-For, counting TRUST_PROXY_HOPS entries from the RIGHT (default 1: the entry
+ * the nearest proxy added). Everything to the left of those can be written by the client, so it is never used.
+ * Set TRUST_PROXY_HOPS to the number of proxies in front of the server (Render's chain is not documented well
+ * enough to guess: deploy with LOG_CLIENT_ADDRESS=true, call from two networks, and read what it logs).
+ * With fewer entries than hops, or no header, the peer address is used.
  */
 export function clientAddress(headers: Headers): string {
   if (process.env.TRUST_PROXY === 'true') {
+    const hops = Math.floor(number('TRUST_PROXY_HOPS', 1));
     const entries = (headers.get('x-forwarded-for') ?? '').split(',').map((entry) => entry.trim()).filter(Boolean);
-    if (entries.length > 0) return entries[entries.length - 1];
+    if (entries.length >= hops) return entries[entries.length - hops];
   }
   return headers.get('x-ujuzi-peer') ?? 'unknown';
+}
+
+// With LOG_CLIENT_ADDRESS=true the first few requests print how the address was worked out, so the right
+// TRUST_PROXY_HOPS can be found on a real deployment. Off by default: addresses are personal data.
+const diagnostics = globalThis as typeof globalThis & { __ujuziAddressLogs?: number };
+function logAddress(headers: Headers, chosen: string): void {
+  if (process.env.LOG_CLIENT_ADDRESS !== 'true') return;
+  const done = (diagnostics.__ujuziAddressLogs ??= 0);
+  if (done >= 30) return;
+  diagnostics.__ujuziAddressLogs = done + 1;
+  console.log(`client-address: chosen=${chosen} peer=${headers.get('x-ujuzi-peer')} x-forwarded-for=[${headers.get('x-forwarded-for') ?? ''}] hops=${number('TRUST_PROXY_HOPS', 1)}`);
 }
 
 /** Counts this request against every allowance that applies, and returns the strictest verdict. */
@@ -99,6 +115,7 @@ export function rateLimitRequest(method: string, pathname: string, headers: Head
   const { partner, anonymous, signIn, windowMs } = limits();
   const limiter = sharedLimiter();
   const address = clientAddress(headers);
+  logAddress(headers, address);
 
   const presented = headers.get('x-api-key');
   const decisions: Decision[] = [];

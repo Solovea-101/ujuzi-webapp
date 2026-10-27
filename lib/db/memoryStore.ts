@@ -25,6 +25,7 @@ import {
   type NewEnrolment,
   type NewKaziApplication,
   type NewSession,
+  type SignInState,
   type NewUser,
   type SessionRow,
   type Store,
@@ -57,6 +58,7 @@ export class MemoryStore implements Store {
   private enrolments = new Map<string, EnrolmentRow>();
   private certificates = new Map<string, CertificateRow>();
   private bookings = new Map<string, BookingRow>();
+  private signInFailures = new Map<string, { failures: number; lastFailureAt: Date; lockedUntil: Date | null }>();
   private kaziApplications = new Map<string, KaziApplicationRow>();
 
   private counters: Record<IdKind | 'certificate', number> = {
@@ -186,6 +188,42 @@ export class MemoryStore implements Store {
     this.sessions.delete(tokenHash);
   }
 
+  async deleteSessionsForUser(userId: string, exceptTokenHash?: string): Promise<void> {
+    for (const [hash, session] of this.sessions) {
+      if (session.user_id === userId && hash !== exceptTokenHash) this.sessions.delete(hash);
+    }
+  }
+
+  async updateUserPassword(userId: string, passwordHash: string): Promise<void> {
+    const user = this.users.get(userId);
+    if (user) user.password_hash = passwordHash;
+  }
+
+  // ---- Failed sign-ins --------------------------------------------------------------------------
+
+  async getSignInLock(emailKey: string, now: Date): Promise<Date | undefined> {
+    const lockedUntil = this.signInFailures.get(emailKey)?.lockedUntil;
+    return lockedUntil && lockedUntil.getTime() > now.getTime() ? new Date(lockedUntil) : undefined;
+  }
+
+  async recordSignInFailure(emailKey: string, now: Date, maxFailures: number, windowMs: number, lockMs: number): Promise<SignInState> {
+    const before = this.signInFailures.get(emailKey);
+    const fresh = !before || now.getTime() - before.lastFailureAt.getTime() > windowMs;
+    const failures = (fresh ? 0 : before.failures) + 1;
+    const locks = failures >= maxFailures;
+    const state = {
+      failures: locks ? 0 : failures,
+      lastFailureAt: now,
+      lockedUntil: locks ? new Date(now.getTime() + lockMs) : (before?.lockedUntil ?? null),
+    };
+    this.signInFailures.set(emailKey, state);
+    return { failures: state.failures, lockedUntil: state.lockedUntil && state.lockedUntil.getTime() > now.getTime() ? new Date(state.lockedUntil) : null };
+  }
+
+  async clearSignInFailures(emailKey: string): Promise<void> {
+    this.signInFailures.delete(emailKey);
+  }
+
   // ---- Enrolments -------------------------------------------------------------------------------
 
   async createEnrolment(input: NewEnrolment): Promise<EnrolmentRow> {
@@ -267,7 +305,12 @@ export class MemoryStore implements Store {
     this.mustFindCourse(input.course_id);
     const event = input.event_name.toLowerCase();
     for (const existing of this.bookings.values()) {
-      if (existing.status === 'pending' && existing.course_id === input.course_id && existing.event_name.toLowerCase() === event) {
+      if (
+        existing.status === 'pending' &&
+        existing.partner === input.partner &&
+        existing.course_id === input.course_id &&
+        existing.event_name.toLowerCase() === event
+      ) {
         throw new StoreConflictError(`A pending booking named "${existing.event_name}" already exists for ${input.course_id}`);
       }
     }
@@ -286,9 +329,9 @@ export class MemoryStore implements Store {
     );
   }
 
-  async updateBooking(id: string, change: BookingChange): Promise<BookingOutcome> {
+  async updateBooking(id: string, change: BookingChange, partner?: string): Promise<BookingOutcome> {
     const booking = this.bookings.get(id);
-    if (!booking) return { kind: 'not_found' };
+    if (!booking || (partner !== undefined && booking.partner !== partner)) return { kind: 'not_found' };
     if (booking.status !== 'pending') return { kind: 'not_pending', booking: copy(booking) };
     booking.crew_size = change.crew_size;
     booking.preferred_start = new Date(change.preferred_start);
@@ -303,9 +346,9 @@ export class MemoryStore implements Store {
     return { kind: 'ok', booking: copy(booking) };
   }
 
-  async deleteBooking(id: string): Promise<BookingOutcome> {
+  async deleteBooking(id: string, partner?: string): Promise<BookingOutcome> {
     const booking = this.bookings.get(id);
-    if (!booking) return { kind: 'not_found' };
+    if (!booking || (partner !== undefined && booking.partner !== partner)) return { kind: 'not_found' };
     if (booking.status !== 'pending') return { kind: 'not_pending', booking: copy(booking) };
     this.bookings.delete(id);
     return { kind: 'ok', booking: copy(booking) };

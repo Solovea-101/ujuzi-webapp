@@ -120,6 +120,8 @@ export interface BookingRow {
   crew_size: number;
   preferred_start: Date;
   status: BookingStatus;
+  /** The partner (the name on its key) that made the booking; only that partner can read or change it. */
+  partner: string;
   created_at: Date;
 }
 
@@ -146,7 +148,7 @@ export type NewEnrolment = Pick<EnrolmentRow, 'graduate_id' | 'course_id'>;
  * Leave certificate_no out and the next free number is issued; seed data names its own.
  */
 export type NewCertificate = Omit<CertificateRow, 'certificate_no' | 'revoked_at'> & { certificate_no?: string };
-export type NewBooking = Pick<BookingRow, 'course_id' | 'event_name' | 'crew_size' | 'preferred_start'>;
+export type NewBooking = Pick<BookingRow, 'course_id' | 'event_name' | 'crew_size' | 'preferred_start' | 'partner'>;
 export type BookingChange = Pick<BookingRow, 'crew_size' | 'preferred_start'>;
 export type NewKaziApplication = Pick<
   KaziApplicationRow,
@@ -184,6 +186,12 @@ export const isStoreReference = (err: unknown): err is StoreReferenceError =>
  * What happened to a booking that may only be changed while pending. The check and the change are
  * one atomic step, so two callers cannot both modify the same pending booking.
  */
+/** Where a sign-in stands for one email address: when it may try again, if it is locked. */
+export interface SignInState {
+  failures: number;
+  lockedUntil: Date | null;
+}
+
 export type BookingOutcome =
   | { kind: 'ok'; booking: BookingRow }
   | { kind: 'not_found' }
@@ -223,6 +231,19 @@ export interface Store {
   createSession(input: NewSession): Promise<SessionRow>;
   getSession(tokenHash: string): Promise<SessionRow | undefined>;
   deleteSession(tokenHash: string): Promise<void>;
+  /** Ends every login of a user, except the one named (so changing a password keeps the current page logged in). */
+  deleteSessionsForUser(userId: string, exceptTokenHash?: string): Promise<void>;
+  updateUserPassword(userId: string, passwordHash: string): Promise<void>;
+
+  // Failed sign-ins per email key (the lower-cased address, whether or not it has an account)
+  /** The lock on this key, or undefined when it may try now. A lock that has run out counts as none. */
+  getSignInLock(emailKey: string, now: Date): Promise<Date | undefined>;
+  /**
+   * Counts one failure. Failures more than windowMs apart start again from 1. Reaching maxFailures sets the lock
+   * (lockMs from now) and starts the count again, in one atomic step.
+   */
+  recordSignInFailure(emailKey: string, now: Date, maxFailures: number, windowMs: number, lockMs: number): Promise<SignInState>;
+  clearSignInFailures(emailKey: string): Promise<void>;
 
   // Enrolments (enrolling twice in one course is a StoreConflictError)
   createEnrolment(input: NewEnrolment): Promise<EnrolmentRow>;
@@ -236,14 +257,15 @@ export interface Store {
   /** Marks a certificate revoked (valid: false from then on). Revoking twice keeps the first date. */
   revokeCertificate(certificateNo: string): Promise<CertificateRow | undefined>;
 
-  // Bookings (only pending bookings can change or be cancelled; a second pending booking with the
-  // same course and event name, ignoring case, is a StoreConflictError)
+  // Bookings (only pending bookings can change or be cancelled; a second pending booking from the same
+  // partner with the same course and event name, ignoring case, is a StoreConflictError. With a partner
+  // given, update and delete treat another partner's booking as not found.)
   createBooking(input: NewBooking): Promise<BookingRow>;
   getBooking(id: string): Promise<BookingRow | undefined>;
   listBookingsForCentre(centreId: string): Promise<BookingRow[]>;
-  updateBooking(id: string, change: BookingChange): Promise<BookingOutcome>;
+  updateBooking(id: string, change: BookingChange, partner?: string): Promise<BookingOutcome>;
   decideBooking(id: string, status: 'confirmed' | 'declined'): Promise<BookingOutcome>;
-  deleteBooking(id: string): Promise<BookingOutcome>;
+  deleteBooking(id: string, partner?: string): Promise<BookingOutcome>;
 
   // Kazi applications (application_id is the id Kazi gave us; saving it twice is a StoreConflictError)
   createKaziApplication(input: NewKaziApplication): Promise<KaziApplicationRow>;

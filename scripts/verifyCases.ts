@@ -358,4 +358,35 @@ export const CASES: readonly VerifyCase[] = [
   { operation: 'POST /api/auth/login', name: 'sign-in limit: 2nd wrong password is 401', request: '/api/auth/login', status: 401, as: 'none', body: { email: 'achieng.otieno@example.com', password: 'wrong-2' } },
   { operation: 'POST /api/auth/login', name: 'sign-in limit: the 3rd attempt is 429, even with the right password', request: '/api/auth/login', status: 429, as: 'none', body: { email: 'achieng.otieno@example.com', password: 'ujuzi-demo-pass' }, headers: { 'retry-after': /^[1-9]\d*$/ } },
   { operation: 'GET /api/me', name: 'restored: the limits are back to normal', request: '/api/me', status: 200, setEnv: { RATE_LIMIT_LOGIN: '100000' } },
+
+  // ---- A booking belongs to the key that made it: the second key is another partner.
+  { operation: GET_BOOKING, name: 'another partner\'s key: 404, as if it did not exist', request: '/api/bookings/bkg_6001', status: 404, as: 'rateKey' },
+  { operation: PUT, name: 'another partner\'s key: 404, unchanged', request: '/api/bookings/bkg_6001', status: 404, as: 'rateKey', body: change,
+    then: { operation: GET_BOOKING, request: '/api/bookings/bkg_6001', status: 200, fields: { status: 'confirmed' } } },
+  { operation: DELETE, name: 'another partner\'s key: 404, still there', request: '/api/bookings/bkg_6001', status: 404, as: 'rateKey',
+    then: { operation: GET_BOOKING, request: '/api/bookings/bkg_6001', status: 200, fields: { status: 'confirmed' } } },
+
+  // ---- Changing a password (Endpoint 25), on the account made by the register case above.
+  { operation: 'POST /api/auth/password', name: 'no token: 401', request: '/api/auth/password', status: 401, as: 'none', body: { currentPassword: 'a long passphrase', newPassword: 'a much better passphrase' } },
+  { operation: 'POST /api/auth/password', name: 'no fields: 400', request: '/api/auth/password', status: 400, as: { bearer: 'newToken' }, body: {} },
+  { operation: 'POST /api/auth/password', name: 'a new password that is too short: 400', request: '/api/auth/password', status: 400, as: { bearer: 'newToken' }, body: { currentPassword: 'a long passphrase', newPassword: 'short' } },
+  { operation: 'POST /api/auth/password', name: 'the same password again: 400', request: '/api/auth/password', status: 400, as: { bearer: 'newToken' }, body: { currentPassword: 'a long passphrase', newPassword: 'a long passphrase' } },
+  { operation: 'POST /api/auth/password', name: 'an unknown field: 400', request: '/api/auth/password', status: 400, as: { bearer: 'newToken' }, body: { currentPassword: 'a long passphrase', newPassword: 'a much better passphrase', email: 'x@example.com' } },
+  { operation: 'POST /api/auth/password', name: 'body over 20 KB: 413', request: '/api/auth/password', status: 413, as: { bearer: 'newToken' }, body: { currentPassword: 'x', newPassword: 'y'.repeat(21_000) } },
+  { operation: 'POST /api/auth/password', name: 'a wrong current password: 403', request: '/api/auth/password', status: 403, as: { bearer: 'newToken' }, body: { currentPassword: 'not my password', newPassword: 'a much better passphrase' } },
+  { operation: 'POST /api/auth/login', name: 'a refused change changed nothing: the old password still signs in', request: '/api/auth/login', status: 200, as: 'none', body: { email: 'verify.person@example.com', password: 'a long passphrase' } },
+  { operation: 'POST /api/auth/password', name: 'changes it: 204', request: '/api/auth/password', status: 204, as: { bearer: 'newToken' }, body: { currentPassword: 'a long passphrase', newPassword: 'a much better passphrase' },
+    then: { operation: 'GET /api/me', request: '/api/me', status: 200, as: { bearer: 'newToken' } } },
+  { operation: 'POST /api/auth/login', name: 'after the change the old password does not: 401', request: '/api/auth/login', status: 401, as: 'none', body: { email: 'verify.person@example.com', password: 'a long passphrase' } },
+  { operation: 'POST /api/auth/login', name: 'after the change the new password signs in', request: '/api/auth/login', status: 200, as: 'none', body: { email: 'verify.person@example.com', password: 'a much better passphrase' } },
+
+  // ---- Lockout: 2 wrong passwords in a row lock an email (the limit is lowered to 2 for these cases only).
+  { operation: 'POST /api/auth/login', name: 'lockout 2: 1st wrong password is 401', request: '/api/auth/login', status: 401, as: 'none', body: { email: 'verify.person@example.com', password: 'wrong-1' }, setEnv: { LOCKOUT_MAX_FAILURES: '2' } },
+  { operation: 'POST /api/auth/login', name: 'lockout: 2nd wrong password is 401', request: '/api/auth/login', status: 401, as: 'none', body: { email: 'verify.person@example.com', password: 'wrong-2' } },
+  { operation: 'POST /api/auth/login', name: 'lockout: the 3rd attempt is 429 with Retry-After, even with the right password', request: '/api/auth/login', status: 429, as: 'none', body: { email: 'verify.person@example.com', password: 'a much better passphrase' }, headers: { 'retry-after': /^[1-9]\d*$/ } },
+  { operation: 'POST /api/auth/login', name: 'lockout: an email with no account is locked the same way', request: '/api/auth/login', status: 401, as: 'none', body: { email: 'nobody.at.all@example.com', password: 'wrong-1' } },
+  { operation: 'POST /api/auth/login', name: 'lockout: ... the 2nd wrong password on it is 401', request: '/api/auth/login', status: 401, as: 'none', body: { email: 'nobody.at.all@example.com', password: 'wrong-2' } },
+  { operation: 'POST /api/auth/login', name: 'lockout: ... and the 3rd is 429', request: '/api/auth/login', status: 429, as: 'none', body: { email: 'nobody.at.all@example.com', password: 'wrong-3' }, headers: { 'retry-after': /^[1-9]\d*$/ } },
+  { operation: 'POST /api/auth/password', name: 'the password change is locked by the same lock: 429', request: '/api/auth/password', status: 429, as: { bearer: 'newToken' }, body: { currentPassword: 'a much better passphrase', newPassword: 'yet another passphrase' }, headers: { 'retry-after': /^[1-9]\d*$/ } },
+  { operation: 'GET /api/me', name: 'restored: the lockout settings are back to normal', request: '/api/me', status: 200, as: { bearer: 'newToken' }, setEnv: { LOCKOUT_MAX_FAILURES: '5' } },
 ];

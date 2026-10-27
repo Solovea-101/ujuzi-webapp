@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       return fail(404, `Course ${input.value.course_id} not found`);
     }
     try {
-      const booking = await store.createBooking(input.value);
+      const booking = await store.createBooking({ ...input.value, partner: guard.partner });
       return json<Booking>(201, toBooking(booking), { Location: `/api/bookings/${booking.id}` });
     } catch (err) {
       if (isStoreConflict(err)) {

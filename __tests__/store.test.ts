@@ -45,7 +45,7 @@ function storeContract(name: string, fresh: () => Promise<Store>) {
         const staff = await store.createUser(graduate({ role: 'staff', email: 'staff@example.com', centre_id: westlands.id }));
         const enrolment = await store.createEnrolment({ graduate_id: grad.id, course_id: catering.id });
         const booking = await store.createBooking({
-          course_id: catering.id, event_name: 'Wedding', crew_size: 6, preferred_start: FUTURE,
+          course_id: catering.id, event_name: 'Wedding', crew_size: 6, preferred_start: FUTURE, partner: 'sherehe',
         });
         const certificate = await store.createCertificate({
           enrolment_id: enrolment.id, course_title: catering.title, level: 'short-course', issued_on: '2026-08-14',
@@ -222,7 +222,7 @@ function storeContract(name: string, fresh: () => Promise<Store>) {
     });
 
     describe('bookings', () => {
-      const newBooking = (course_id: string) => ({ course_id, event_name: 'Wedding', crew_size: 6, preferred_start: FUTURE });
+      const newBooking = (course_id: string) => ({ course_id, event_name: 'Wedding', crew_size: 6, preferred_start: FUTURE, partner: 'sherehe' });
 
       it('are created pending, listed per centre and changed while pending', async () => {
         const store = await fresh();
@@ -266,7 +266,7 @@ function storeContract(name: string, fresh: () => Promise<Store>) {
     });
 
     describe('one pending booking per course and event name', () => {
-      const booking = (course_id: string, event_name: string) => ({ course_id, event_name, crew_size: 6, preferred_start: FUTURE });
+      const booking = (course_id: string, event_name: string, partner = 'sherehe') => ({ course_id, event_name, crew_size: 6, preferred_start: FUTURE, partner });
 
       it('refuses a second pending booking for the same event, ignoring case', async () => {
         const store = await fresh();
@@ -300,6 +300,88 @@ function storeContract(name: string, fresh: () => Promise<Store>) {
         await store.createBooking(booking(catering.id, 'Kamau reunion'));
         await expect(store.createBooking(booking(catering.id, 'kamau reunion'))).rejects.toBeInstanceOf(StoreConflictError);
         expect(await store.listBookingsForCentre(westlands.id)).toHaveLength(1);
+      });
+    });
+
+    describe('bookings belong to the partner that made them', () => {
+      const make = (course_id: string, partner: string, event_name = 'Wedding') => ({ course_id, event_name, crew_size: 6, preferred_start: FUTURE, partner });
+
+      it('keeps the partner on the booking, and lets another partner book the same event', async () => {
+        const store = await fresh();
+        const { catering } = await withCentresAndCourses(store);
+        const first = await store.createBooking(make(catering.id, 'sherehe'));
+        const second = await store.createBooking(make(catering.id, 'other'));
+        expect([first.partner, second.partner]).toEqual(['sherehe', 'other']);
+        await expect(store.createBooking(make(catering.id, 'other'))).rejects.toBeInstanceOf(StoreConflictError);
+      });
+
+      it('treats another partner\'s booking as not found when changing or cancelling it, and changes nothing', async () => {
+        const store = await fresh();
+        const { catering } = await withCentresAndCourses(store);
+        const mine = await store.createBooking(make(catering.id, 'sherehe'));
+        const change = { crew_size: 9, preferred_start: FUTURE };
+        expect(await store.updateBooking(mine.id, change, 'other')).toEqual({ kind: 'not_found' });
+        expect(await store.deleteBooking(mine.id, 'other')).toEqual({ kind: 'not_found' });
+        expect((await store.getBooking(mine.id))?.crew_size).toBe(6);
+        expect(await store.updateBooking(mine.id, change, 'sherehe')).toMatchObject({ kind: 'ok' });
+        expect(await store.deleteBooking(mine.id, 'sherehe')).toMatchObject({ kind: 'ok' });
+      });
+    });
+
+    describe('passwords and logins', () => {
+      it('changes a password, and ends every login of the user except the one named', async () => {
+        const store = await fresh();
+        const grad = await store.createUser(graduate());
+        const other = await store.createUser(graduate({ email: 'brian@example.com' }));
+        const later = new Date(Date.now() + 86_400_000);
+        for (const [hash, user] of [['a', grad], ['b', grad], ['c', other]] as const) {
+          await store.createSession({ token_hash: hash, user_id: user.id, expires_at: later });
+        }
+        await store.updateUserPassword(grad.id, 'scrypt$new');
+        await store.deleteSessionsForUser(grad.id, 'a');
+        expect((await store.getUser(grad.id))?.password_hash).toBe('scrypt$new');
+        expect(await store.getSession('a')).toBeDefined();
+        expect(await store.getSession('b')).toBeUndefined();
+        expect(await store.getSession('c')).toBeDefined();
+        await store.deleteSessionsForUser(grad.id);
+        expect(await store.getSession('a')).toBeUndefined();
+      });
+    });
+
+    describe('failed sign-ins', () => {
+      const at = (seconds: number) => new Date(Date.UTC(2027, 0, 1, 10, 0, seconds));
+      const MINUTE = 60_000;
+
+      it('locks an email after the allowed number of failures, for the lock time, then forgets', async () => {
+        const store = await fresh();
+        expect(await store.getSignInLock('a@example.com', at(0))).toBeUndefined();
+        expect(await store.recordSignInFailure('a@example.com', at(0), 3, 15 * MINUTE, 10 * MINUTE)).toMatchObject({ failures: 1, lockedUntil: null });
+        expect(await store.recordSignInFailure('a@example.com', at(1), 3, 15 * MINUTE, 10 * MINUTE)).toMatchObject({ failures: 2, lockedUntil: null });
+        expect(await store.getSignInLock('a@example.com', at(2))).toBeUndefined();
+        const third = await store.recordSignInFailure('a@example.com', at(2), 3, 15 * MINUTE, 10 * MINUTE);
+        expect(third.lockedUntil?.toISOString()).toBe(at(2 + 600).toISOString());
+        expect((await store.getSignInLock('a@example.com', at(3)))?.toISOString()).toBe(at(602).toISOString());
+        expect(await store.getSignInLock('a@example.com', at(603))).toBeUndefined(); // ran out
+        expect(await store.getSignInLock('b@example.com', at(3))).toBeUndefined(); // another email is not affected
+      });
+
+      it('starts counting again when the failures are further apart than the window', async () => {
+        const store = await fresh();
+        await store.recordSignInFailure('a@example.com', at(0), 3, 15 * MINUTE, 10 * MINUTE);
+        await store.recordSignInFailure('a@example.com', at(1), 3, 15 * MINUTE, 10 * MINUTE);
+        const late = await store.recordSignInFailure('a@example.com', at(1 + 16 * 60), 3, 15 * MINUTE, 10 * MINUTE);
+        expect(late).toMatchObject({ failures: 1, lockedUntil: null });
+      });
+
+      it('forgets the failures on success, and counts every one of several at the same moment', async () => {
+        const store = await fresh();
+        await store.recordSignInFailure('a@example.com', at(0), 3, 15 * MINUTE, 10 * MINUTE);
+        await store.recordSignInFailure('a@example.com', at(1), 3, 15 * MINUTE, 10 * MINUTE);
+        await store.clearSignInFailures('a@example.com');
+        expect((await store.recordSignInFailure('a@example.com', at(2), 3, 15 * MINUTE, 10 * MINUTE)).failures).toBe(1);
+
+        await Promise.all([1, 2, 3].map(() => store.recordSignInFailure('c@example.com', at(5), 3, 15 * MINUTE, 10 * MINUTE)));
+        expect(await store.getSignInLock('c@example.com', at(6))).toBeDefined();
       });
     });
 

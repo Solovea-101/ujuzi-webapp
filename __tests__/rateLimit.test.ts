@@ -54,7 +54,7 @@ describe('RateLimiter', () => {
 describe('limits() and clientAddress()', () => {
   const saved = { ...process.env };
   afterEach(() => {
-    for (const k of ['RATE_LIMIT_PARTNER', 'RATE_LIMIT_ANON', 'RATE_LIMIT_LOGIN', 'RATE_LIMIT_WINDOW_MS', 'TRUST_PROXY']) {
+    for (const k of ['RATE_LIMIT_PARTNER', 'RATE_LIMIT_ANON', 'RATE_LIMIT_LOGIN', 'RATE_LIMIT_WINDOW_MS', 'TRUST_PROXY', 'TRUST_PROXY_HOPS']) {
       if (saved[k] === undefined) delete process.env[k];
       else process.env[k] = saved[k];
     }
@@ -86,6 +86,19 @@ describe('limits() and clientAddress()', () => {
     expect(clientAddress(new Headers({ 'x-forwarded-for': 'forged-by-client, 203.0.113.7' }))).toBe('203.0.113.7');
     expect(clientAddress(new Headers({ 'x-ujuzi-peer': '10.0.0.1' }))).toBe('10.0.0.1'); // no header: fall back
   });
+
+  it('counts TRUST_PROXY_HOPS entries from the right, never trusting what is to the left of them', () => {
+    process.env.TRUST_PROXY = 'true';
+    const forwarded = new Headers({ 'x-ujuzi-peer': '10.0.0.1', 'x-forwarded-for': 'forged, 198.51.100.4, 203.0.113.7' });
+    process.env.TRUST_PROXY_HOPS = '2';
+    expect(clientAddress(forwarded)).toBe('198.51.100.4');
+    process.env.TRUST_PROXY_HOPS = '3'; // the entry the client wrote itself: only reached if the setting says so
+    expect(clientAddress(forwarded)).toBe('forged');
+    process.env.TRUST_PROXY_HOPS = '4'; // more hops than entries: use the peer address
+    expect(clientAddress(forwarded)).toBe('10.0.0.1');
+    process.env.TRUST_PROXY_HOPS = 'nonsense'; // unusable: back to 1
+    expect(clientAddress(forwarded)).toBe('203.0.113.7');
+  });
 });
 
 describe('over HTTP', () => {
@@ -100,8 +113,8 @@ describe('over HTTP', () => {
     resetStore();
   });
   afterEach(() => {
-    for (const k of ['RATE_LIMIT_PARTNER', 'RATE_LIMIT_ANON', 'RATE_LIMIT_LOGIN', 'RATE_LIMIT_WINDOW_MS', 'TRUST_PROXY']) process.env[k] = saved[k];
-    if (saved.TRUST_PROXY === undefined) delete process.env.TRUST_PROXY;
+    for (const k of ['RATE_LIMIT_PARTNER', 'RATE_LIMIT_ANON', 'RATE_LIMIT_LOGIN', 'RATE_LIMIT_WINDOW_MS', 'TRUST_PROXY', 'TRUST_PROXY_HOPS']) process.env[k] = saved[k];
+    for (const k of ['TRUST_PROXY', 'TRUST_PROXY_HOPS']) if (saved[k] === undefined) delete process.env[k];
   });
 
   const get = (key: string = PARTNER_KEY) => request(app.server).get('/api/courses').set('X-API-Key', key);

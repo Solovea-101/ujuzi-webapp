@@ -565,7 +565,7 @@ async function main(): Promise<number> {
     process.env.KAZI_API_URL = kazi.url;
     process.env.KAZI_WS_URL = kazi.wsUrl;
     // Only the hash of this key is configured, exactly as in production.
-    process.env.PARTNER_KEYS = [hashKey(VERIFY_PARTNER_KEY), hashKey(VERIFY_RATE_KEY)].join(',');
+    process.env.PARTNER_KEYS = [`sherehe:${hashKey(VERIFY_PARTNER_KEY)}`, `verifyother:${hashKey(VERIFY_RATE_KEY)}`].join(',');
     // The limits sit far above what verify sends; the rate-limit cases lower them on purpose and restore them.
     process.env.RATE_LIMIT_PARTNER = '100000';
     process.env.RATE_LIMIT_ANON = '100000';

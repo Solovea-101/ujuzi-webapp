@@ -3,9 +3,9 @@
  * it found. It needs a server with the in-memory sample data, a partner key, and rate limits that will not
  * get in the way:
  *
- *   PARTNER_KEYS=$(printf %s probe-key | shasum -a 256 | cut -d' ' -f1) RATE_LIMIT_ANON=100000 \
- *     RATE_LIMIT_PARTNER=100000 RATE_LIMIT_LOGIN=100000 PORT=4907 npm start
- *   UJUZI_URL=http://localhost:4907 UJUZI_API_KEY=probe-key npm run security:probe
+ *   PARTNER_KEYS=sherehe:$(printf %s probe-key | shasum -a 256 | cut -d' ' -f1),other:$(printf %s probe-key-2 | shasum -a 256 | cut -d' ' -f1) \
+ *     RATE_LIMIT_ANON=100000 RATE_LIMIT_PARTNER=100000 RATE_LIMIT_LOGIN=100000 PORT=4907 npm start
+ *   UJUZI_URL=http://localhost:4907 UJUZI_API_KEY=probe-key UJUZI_API_KEY_2=probe-key-2 npm run security:probe
  *
  * Each line is OK (the attack failed, as it should) or FINDING (something to read and decide on). It only
  * creates sample-data records in the in-memory server it is pointed at; do not run it against a deployment
@@ -13,6 +13,8 @@
  */
 const BASE = (process.env.UJUZI_URL ?? 'http://localhost:4907').replace(/\/+$/, '');
 const KEY = process.env.UJUZI_API_KEY ?? '';
+// A second partner's key (optional): with it the probe checks that one partner cannot reach another's bookings.
+const KEY_2 = process.env.UJUZI_API_KEY_2 ?? '';
 const PASSWORD = process.env.SEED_PASSWORD || 'ujuzi-demo-pass';
 
 let findings = 0;
@@ -101,8 +103,17 @@ async function otherPeoplesData(): Promise<void> {
   check('staff cannot use the graduate endpoints: 403', (await call('GET', '/api/me/enrolments', { token: westlands })).status === 403);
   check('a login token cannot use the partner-only endpoints: 401', (await call('GET', '/api/bookings/bkg_6001', { token: westlands })).status === 401);
   check('a partner key cannot use staff or graduate endpoints: 401', (await call('GET', '/api/bookings', { key: KEY })).status === 401 && (await call('GET', '/api/me', { key: KEY })).status === 401);
-  const partnerSees = await call('GET', '/api/bookings/bkg_6002', { key: KEY });
-  console.log(`NOTE     a partner key can read ANY booking by id (status ${partnerSees.status}): bookings are not scoped to the partner that made them. Fine with one partner; with a second partner key it would let each read the other's bookings.`);
+  if (KEY_2) {
+    for (const [method, body] of [['GET', undefined], ['PUT', { crewSize: 3, preferredStart: future(30) }], ['DELETE', undefined]] as const) {
+      const res = await call(method, '/api/bookings/bkg_6001', { key: KEY_2, body });
+      check(`a second partner's key cannot ${method} the first partner's booking: 404`, res.status === 404, `status ${res.status}`);
+    }
+    check('the first partner still reads its booking, unchanged', (await call('GET', '/api/bookings/bkg_6001', { key: KEY })).status === 200);
+    const mine = await call('POST', '/api/bookings', { key: KEY_2, body: { courseId: 'crs_501', crewSize: 2, preferredStart: future(40), eventName: `Probe ${Date.now()}` } });
+    check('a booking made with the second key is invisible to the first (404)', mine.status === 201 && (await call('GET', `/api/bookings/${(mine.body as { id: string }).id}`, { key: KEY })).status === 404);
+  } else {
+    console.log('NOTE     UJUZI_API_KEY_2 is not set, so one partner reaching another partner\'s bookings was not tried.');
+  }
 }
 
 async function errorMessages(): Promise<void> {
@@ -131,12 +142,31 @@ async function errorMessages(): Promise<void> {
     check(`${label}: status ${res.status}, nothing that reveals the server`, !leaks && res.status < 500, leaks ? res.text.slice(0, 120) : `status ${res.status}`);
   }
   const wrongMethod = await call('PUT', '/api/courses', { key: KEY, body: {} });
-  const hasJson = wrongMethod.body !== undefined;
-  if (!hasJson) console.log(`NOTE     a method a route does not have answers ${wrongMethod.status} with an EMPTY body (Next's own answer), not the usual { message }. Nothing is revealed, but it is the one error that breaks the "every error is { message }" rule.`);
+  check('a method a route does not have: 405 with a { message } body', wrongMethod.status === 405 && typeof (wrongMethod.body as { message?: string } | undefined)?.message === 'string', `status ${wrongMethod.status} body ${wrongMethod.text.slice(0, 60)}`);
   const odd = await call('GET', '/api/courses/crs_501', { key: KEY });
   check('answers carry no X-Powered-By or server version header', !odd.headers.get('x-powered-by') && !/\d+\.\d+/.test(odd.headers.get('server') ?? ''), `x-powered-by=${odd.headers.get('x-powered-by')} server=${odd.headers.get('server')}`);
   check('API answers say Cache-Control: no-store', odd.headers.get('cache-control') === 'no-store', String(odd.headers.get('cache-control')));
   check('X-Content-Type-Options: nosniff is sent', odd.headers.get('x-content-type-options') === 'nosniff');
+}
+
+async function passwordGuessing(): Promise<void> {
+  section('5. Password guessing: is it slowed, and does the lock say who has an account?');
+  const wrong = (email: string) => call('POST', '/api/auth/login', { body: { email, password: 'definitely-wrong' } });
+  const target = `lock.${Date.now()}@example.com`;
+  const ghost = `ghost.${Date.now()}@example.com`;
+  await call('POST', '/api/auth/register', { body: { role: 'graduate', email: target, password: 'a long passphrase', firstName: 'Lock', lastName: 'Test' } });
+  const seen = (rows: Answer[]) => rows.map((r) => r.status).join(',');
+  const real: Answer[] = [];
+  const none: Answer[] = [];
+  for (let i = 0; i < 7; i++) {
+    real.push(await wrong(target));
+    none.push(await wrong(ghost));
+  }
+  check('after 5 wrong passwords the account is locked (401 x5, then 429)', seen(real) === '401,401,401,401,401,429,429', seen(real));
+  check('an email with no account is locked the same way, so the lock says nothing about who is registered', seen(none) === seen(real), seen(none));
+  const locked = await call('POST', '/api/auth/login', { body: { email: target, password: 'a long passphrase' } });
+  check('the right password does not get past the lock, and Retry-After says how long', locked.status === 429 && Number(locked.headers.get('retry-after')) > 0, `status ${locked.status}`);
+  check('the lock message is the same for both', real[6].text === none[6].text, `${real[6].text} / ${none[6].text}`);
 }
 
 async function writeEndpoints(): Promise<void> {
@@ -166,6 +196,7 @@ async function main(): Promise<void> {
   await sensitiveFields();
   await otherPeoplesData();
   await errorMessages();
+  await passwordGuessing();
   await writeEndpoints();
   console.log(findings === 0 ? '\nsecurity:probe: nothing to fix (read the NOTE lines too)' : `\nsecurity:probe: ${findings} FINDING(S) to read`);
   process.exit(findings === 0 ? 0 : 1);

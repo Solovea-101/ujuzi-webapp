@@ -1,0 +1,77 @@
+# Output of 'npm run security:probe' against a local server with two partner keys, 2026-10-28. Keys are the throwaway ones used for this run only.
+
+
+> ujuzi-webapp@0.1.0 security:probe
+> tsx scripts/securityProbe.ts
+
+Security probe against http://localhost:4907
+
+== 1. Sensitive fields: does any answer carry a hash, token, secret or personal detail it should not?
+OK       GET /api/courses (partner): no password hash, secret or database field
+OK       GET /api/certificates/UJZ-2026-00123 (partner): no password hash, secret or database field
+OK       GET /api/bookings/bkg_6001 (partner): no password hash, secret or database field
+OK       GET /api/me (graduate): no password hash, secret or database field
+OK       GET /api/me/enrolments: no password hash, secret or database field
+OK       GET /api/bookings (staff): no password hash, secret or database field
+OK       POST /api/auth/login: no password hash, secret or database field
+OK       POST /api/auth/register: no password hash, secret or database field
+OK       the certificate check shows a first name and initial only, never a surname, email or id
+OK       GET /api/me returns only the contract's six fields
+OK       partner answers never contain an email address
+
+== 2. Other people's data: can changing an id reach a record that is not yours?
+OK       setup: Brian enrols in a course
+OK       a graduate cannot list another graduate's enrolments (the list is always the caller's own)
+OK       a graduate cannot change or withdraw someone else's Kazi application: 404, as if it did not exist
+OK       staff of another centre cannot decide a booking: 403
+OK       staff of another centre cannot edit a course: 403
+OK       staff of another centre cannot issue a certificate: 403
+OK       staff see only their own centre's bookings
+OK       a graduate cannot use the staff endpoints: 403
+OK       staff cannot use the graduate endpoints: 403
+OK       a login token cannot use the partner-only endpoints: 401
+OK       a partner key cannot use staff or graduate endpoints: 401
+OK       a second partner's key cannot GET the first partner's booking: 404
+OK       a second partner's key cannot PUT the first partner's booking: 404
+OK       a second partner's key cannot DELETE the first partner's booking: 404
+OK       the first partner still reads its booking, unchanged
+OK       a booking made with the second key is invisible to the first (404)
+
+== 3. Error messages: do failures reveal how the server is built?
+OK       an id with SQL in it: status 404, nothing that reveals the server
+OK       a query value with SQL in it: status 400, nothing that reveals the server
+OK       broken percent-encoding in the path: status 400, nothing that reveals the server
+OK       a null byte in the path: status 404, nothing that reveals the server
+OK       a 5,000-character id: status 404, nothing that reveals the server
+OK       a body that is not JSON: status 400, nothing that reveals the server
+OK       JSON nested 9,000 levels deep: status 400, nothing that reveals the server
+OK       a number too big for JSON: status 400, nothing that reveals the server
+OK       a body of 30 KB: status 413, nothing that reveals the server
+OK       a method the route does not have: status 405, nothing that reveals the server
+OK       an unknown API path: status 404, nothing that reveals the server
+OK       an unknown API path with a trailing dot-dot: status 404, nothing that reveals the server
+OK       a malformed bearer token: status 401, nothing that reveals the server
+OK       a job id with markup in it: status 400, nothing that reveals the server
+OK       a method a route does not have: 405 with a { message } body
+OK       answers carry no X-Powered-By or server version header
+OK       API answers say Cache-Control: no-store
+OK       X-Content-Type-Options: nosniff is sent
+
+== 5. Password guessing: is it slowed, and does the lock say who has an account?
+OK       after 5 wrong passwords the account is locked (401 x5, then 429)
+OK       an email with no account is locked the same way, so the lock says nothing about who is registered
+OK       the right password does not get past the lock, and Retry-After says how long
+OK       the lock message is the same for both
+
+== 4. Write endpoints: can a caller send an extra field and have it saved?
+OK       POST /api/bookings with status and id: refused with 400 "Unknown field(s)"
+OK       PUT /api/bookings with eventName: refused with 400 "Unknown field(s)"
+OK       POST /api/courses with centreId (choosing another centre): refused with 400 "Unknown field(s)"
+OK       POST /api/me/applications with studentId (acting as someone else): refused with 400 "Unknown field(s)"
+OK       POST /api/auth/register with an id: refused with 400 "Unknown field(s)"
+OK       POST /api/auth/register with isAdmin: refused with 400 "Unknown field(s)"
+OK       POST /api/auth/register with a __proto__ key (prototype pollution): refused with 400 "Unknown field(s)"
+OK       a self-registered "staff" account is refused without the invite code (403)
+OK       the earlier __proto__ attempt changed nothing for other requests
+
+security:probe: nothing to fix (read the NOTE lines too)

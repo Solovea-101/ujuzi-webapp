@@ -23,7 +23,8 @@ export async function GET(req: NextRequest, { params }: Context) {
     if (!guard.ok) return guard.response;
     const { bookingId } = await params;
     const row = await (await getStore()).getBooking(bookingId);
-    if (!row) return fail(404, `Booking ${bookingId} not found`);
+    // Another partner's booking is "not found", the same answer as one that never existed.
+    if (!row || row.partner !== guard.partner) return fail(404, `Booking ${bookingId} not found`);
     return json<Booking>(200, toBooking(row));
   });
 }
@@ -40,7 +41,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
     const change = parseBookingChange(parsed.body);
     if (!change.ok) return fail(400, change.message);
 
-    const outcome = await (await getStore()).updateBooking(bookingId, change.value);
+    const outcome = await (await getStore()).updateBooking(bookingId, change.value, guard.partner);
     if (outcome.kind !== 'ok') return refused(outcome, bookingId, 'changed');
     return json<Booking>(200, toBooking(outcome.booking));
   });
@@ -52,7 +53,7 @@ export async function DELETE(req: NextRequest, { params }: Context) {
     const guard = requirePartner(req);
     if (!guard.ok) return guard.response;
     const { bookingId } = await params;
-    const outcome = await (await getStore()).deleteBooking(bookingId);
+    const outcome = await (await getStore()).deleteBooking(bookingId, guard.partner);
     if (outcome.kind !== 'ok') return refused(outcome, bookingId, 'cancelled');
     return noContent();
   });

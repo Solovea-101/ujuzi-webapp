@@ -32,7 +32,7 @@ describeWithPostgres('prepareDatabase against PostgreSQL', () => {
 
   it('creates the schema on an empty database, and says so', async () => {
     await prepareDatabase(log);
-    expect(lines[0]).toBe('Applied migrations: 001_init.sql, 002_pending_booking_unique.sql');
+    expect(lines[0]).toBe('Applied migrations: 001_init.sql, 002_pending_booking_unique.sql, 003_partners_and_lockout.sql');
     expect(await count('centres')).toBe(0); // not seeded unless asked
   });
 

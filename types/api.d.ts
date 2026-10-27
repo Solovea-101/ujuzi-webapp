@@ -641,6 +641,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change the logged in user's password (Endpoint 25, G1)
+         * @description Order of checks: login (401), body (400, 413), too many wrong passwords lately (429), the current password (403). Every other login of the user ends at once; the token that made the call keeps working. A wrong current password counts towards the same lock as a wrong sign-in.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PasswordChange"];
+                };
+            };
+            responses: {
+                /** @description The password was changed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["LoginRequired"];
+                403: components["responses"]["Forbidden"];
+                413: components["responses"]["PayloadTooLarge"];
+                429: components["responses"]["TooManyRequests"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me": {
         parameters: {
             query?: never;
@@ -1190,6 +1236,15 @@ export interface components {
             /** @example a long passphrase */
             password: string;
         };
+        PasswordChange: {
+            /** @example a long passphrase */
+            currentPassword: string;
+            /**
+             * @description Must differ from currentPassword
+             * @example a much better passphrase
+             */
+            newPassword: string;
+        };
         AuthResponse: {
             /**
              * @description Send as "Authorization: Bearer TOKEN". Shown once; only its hash is stored.
@@ -1428,7 +1483,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The caller has used its allowance for this minute (100 requests per partner key, 120 per network address for everyone else, 10 sign-in attempts per address). Nothing was changed; wait Retry-After seconds and try again. */
+        /** @description The caller has used its allowance for this minute (100 requests per partner key, 120 per network address for everyone else, 10 sign-in attempts per address). Nothing was changed; wait Retry-After seconds and try again. On login and the password change the 429 can also mean that the email address is locked after five wrong passwords; Retry-After says how long. */
         TooManyRequests: {
             headers: {
                 /** @description Whole seconds until the caller's allowance starts again */

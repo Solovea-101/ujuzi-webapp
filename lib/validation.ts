@@ -128,7 +128,7 @@ function futureDateTime(name: string, value: unknown, now: number): Valid<Date> 
 }
 
 /** POST /api/bookings: courseId, crewSize, preferredStart, eventName, and nothing else. */
-export function parseNewBooking(body: unknown, now = Date.now()): Valid<NewBooking> {
+export function parseNewBooking(body: unknown, now = Date.now()): Valid<Omit<NewBooking, 'partner'>> {
   const fields = objectWithFields(body, BOOKING_FIELDS, BOOKING_FIELDS);
   if (!fields.ok) return fields;
   const { courseId, eventName } = fields.value;
@@ -243,6 +243,21 @@ export function parseCredentials(body: unknown): Valid<{ email: string; password
     return { ok: false, message: 'password must be 1 to 128 characters' };
   }
   return { ok: true, value: { email: address.value, password } };
+}
+
+/** POST /api/auth/password. */
+export function parsePasswordChange(body: unknown): Valid<{ currentPassword: string; newPassword: string }> {
+  const fields = objectWithFields(body, ['currentPassword', 'newPassword'], ['currentPassword', 'newPassword']);
+  if (!fields.ok) return fields;
+  const { currentPassword, newPassword } = fields.value;
+  if (typeof currentPassword !== 'string' || currentPassword.length < 1 || currentPassword.length > 128) {
+    return { ok: false, message: 'currentPassword must be 1 to 128 characters' };
+  }
+  if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 128) {
+    return { ok: false, message: 'newPassword must be 8 to 128 characters' };
+  }
+  if (newPassword === currentPassword) return { ok: false, message: 'newPassword must be different from currentPassword' };
+  return { ok: true, value: { currentPassword, newPassword } };
 }
 
 /** POST /api/enrolments. */
