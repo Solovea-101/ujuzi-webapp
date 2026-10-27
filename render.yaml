@@ -1,0 +1,38 @@
+# Render blueprint for Ujuzi (R3). Nothing here is applied until the team creates the services from it.
+# Secrets are never in this file: the "sync: false" values are typed into Render's dashboard.
+services:
+  - type: web
+    name: ujuzi
+    runtime: node
+    plan: free # sleeps after 15 idle minutes; the first request after that can take up to a minute
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_VERSION
+        value: "22" # Next.js needs 20.9 or newer
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ujuzi-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: PARTNER_KEYS
+        sync: false # SHA-256 hashes of the keys issued to Sherehe: `npm run key:issue -- sherehe`
+      - key: KAZI_API_URL
+        value: https://kaziconnect1-1xmu.onrender.com
+      - key: KAZI_WS_URL
+        value: wss://kaziconnect1-1xmu.onrender.com
+      - key: STAFF_INVITE_CODE
+        sync: false # leave unset to keep staff sign-up closed
+      - key: SEED_ON_START
+        value: "true" # demo data into an EMPTY database; remove once real data exists
+      - key: SEED_PASSWORD
+        sync: false # REQUIRED if SEED_ON_START is true: the demo accounts' password (the default is public)
+
+databases:
+  - name: ujuzi-db
+    plan: free
+    databaseName: ujuzi
+    user: ujuzi
