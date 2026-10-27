@@ -328,6 +328,10 @@ export function parseNewApplication(body: unknown, now = Date.now()): Valid<Appl
   if (!fields.ok) return fields;
   const jobId = idField('jobId', 'job_12345', fields.value.jobId);
   if (!jobId.ok) return jobId;
+  // The id is passed on to Kazi inside a URL, so only plain id characters are allowed through.
+  if (!/^[A-Za-z0-9_-]+$/.test(jobId.value)) {
+    return { ok: false, message: 'jobId must be a text id of up to 64 characters, for example job_12345' };
+  }
   const date = futureDateTime('preferredDate', fields.value.preferredDate, now);
   if (!date.ok) return date;
   const note = noteField(fields.value.note);

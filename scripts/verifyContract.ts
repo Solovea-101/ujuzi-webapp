@@ -8,6 +8,7 @@ import addFormats from 'ajv-formats';
 import { parse } from 'yaml';
 import { hashKey } from '../lib/auth/partnerKey';
 import { DEMO_PASSWORD } from '../lib/db/seedData';
+import { sharedLimiter } from '../lib/rateLimit';
 import { startKaziStub, type KaziStub } from '../__tests__/helpers/kaziStub';
 import { CASES, type Auth, type VerifyCase } from './verifyCases';
 
@@ -29,6 +30,7 @@ const ROOT = path.resolve(__dirname, '..');
 const CONTRACT = 'openapi.yaml';
 const REPORT = 'VERIFICATION.md';
 const VERIFY_PARTNER_KEY = 'ujz_verify_run_key_never_used_anywhere_else';
+const VERIFY_RATE_KEY = 'ujz_verify_run_second_key_for_the_rate_limit_cases';
 const TYPE_FILES: ReadonlyArray<{ yaml: string; types: string }> = [
   { yaml: 'openapi.yaml', types: 'types/api.d.ts' },
   { yaml: 'partner-tests/kazi_openapi.yaml', types: 'types/kazi.d.ts' },
@@ -323,6 +325,7 @@ async function authHeaders(auth: Auth, ctx: RunContext): Promise<Record<string, 
   switch (auth) {
     case 'partner': return { 'X-API-Key': ctx.partnerKey };
     case 'wrongKey': return { 'X-API-Key': 'not-the-partner-key' };
+    case 'rateKey': return { 'X-API-Key': VERIFY_RATE_KEY };
     case 'none': return {};
     case 'badToken': return { Authorization: `Bearer ${'0'.repeat(64)}` };
     default: return { Authorization: `Bearer ${await tokenFor(auth, ctx)}` };
@@ -409,6 +412,8 @@ async function runCase(ctx: RunContext, operation: Operation, c: VerifyCase): Pr
 
   const sent = c.rawBody ?? (c.body !== undefined ? JSON.stringify(c.body) : undefined);
   const bookingsBefore = c.noNewBooking ? await ctx.countBookings() : undefined;
+  if (c.resetRateLimits) sharedLimiter().clear();
+  for (const [name, value] of Object.entries(c.setEnv ?? {})) process.env[name] = value;
   if (c.kaziDown) await ctx.kazi.down();
   let main: Exchange;
   try {
@@ -560,7 +565,11 @@ async function main(): Promise<number> {
     process.env.KAZI_API_URL = kazi.url;
     process.env.KAZI_WS_URL = kazi.wsUrl;
     // Only the hash of this key is configured, exactly as in production.
-    process.env.PARTNER_KEYS = hashKey(VERIFY_PARTNER_KEY);
+    process.env.PARTNER_KEYS = [hashKey(VERIFY_PARTNER_KEY), hashKey(VERIFY_RATE_KEY)].join(',');
+    // The limits sit far above what verify sends; the rate-limit cases lower them on purpose and restore them.
+    process.env.RATE_LIMIT_PARTNER = '100000';
+    process.env.RATE_LIMIT_ANON = '100000';
+    process.env.RATE_LIMIT_LOGIN = '100000';
     // Fixed settings, so a developer's own environment cannot change what verify sees.
     process.env.SESSION_SECRET = 'verify-run-secret';
     delete process.env.SEED_PASSWORD;

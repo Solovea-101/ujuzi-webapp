@@ -21,6 +21,25 @@ describe('createServer', () => {
     expect(res.headers['etag']).toBeUndefined();
   });
 
+  it('sends security headers on pages and answers, and keeps API answers out of caches', async () => {
+    for (const path of ['/', '/api/nothing-here']) {
+      const res = await request(app.server).get(path);
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+      expect(res.headers['x-frame-options']).toBe('DENY');
+      expect(res.headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+    }
+    expect((await request(app.server).get('/api/nothing-here')).headers['cache-control']).toBe('no-store');
+  });
+
+  it('answers a path with broken percent-encoding with 400 { message }, not a bare 500', async () => {
+    for (const path of ['/api/courses/%E0%A4%A', '/api/courses/%', '/%E0%A4%A']) {
+      const res = await request(app.server).get(path);
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ message: 'The URL is not valid.' });
+    }
+    expect((await request(app.server).get('/api/courses/crs_501%20')).status).not.toBe(400); // good encoding still passes
+  });
+
   it('answers an OPTIONS preflight on /api with 204 and CORS headers', async () => {
     const res = await request(app.server)
       .options('/api/courses')

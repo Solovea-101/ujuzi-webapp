@@ -52,11 +52,19 @@ Flagged to Sherehe: TODO. Nothing in 0.2.0 changes what Sherehe calls, but R8 sa
 - *Kazi-facing endpoints:* a Kazi that is down, too slow (10 s when a user waits) or answering something unusable is our own `502 { "message": "Kazi Connect could not be reached. Try again in a minute." }` and changes nothing; every other endpoint keeps working. A Kazi 400 or 409 on an application becomes our own 400 or 409 in our own words. Job reads are cached for 5 minutes. Pay is shown as whole shillings (Kazi's decimals are rounded). A Kazi job whose category is outside the shared list is left out.
 - *Applications:* Ujuzi sends Kazi only the graduate's Ujuzi id (`grd_0101`) as `studentId`, never a name, email or phone. A withdrawn application stays in the graduate's list as `cancelled`; if Kazi has already lost an application, withdrawing it counts as done. Someone else's application is a 404, not a 403. If Kazi accepts an application but Ujuzi then cannot save it, Ujuzi withdraws it at Kazi again. A status only moves forward: once accepted, filled or cancelled it never changes.
 - *Live status:* one WebSocket per pending application, reconnecting after 1 s, 2 s, 4 s ... up to a minute, plus a poll every 2 minutes in case the socket is silent; it stops at a final status and resumes every pending application when the server starts. The feed socket is authenticated by its first message and closed with code 4401 if that is missing, late (5 s), bad, or a staff token.
-- *Not built, noted as risks:* there is no rate limit or lockout on login, and no password reset.
+- *Not built, noted as risks:* there is no password reset, and no lockout of an account (sign-in is rate limited per address since 0.3.0, see below).
 
 Design choices made in the new endpoints (the team to confirm): staff accounts cannot be self-registered without the deployment's invite code (when none is configured, staff sign-up is closed); the WebSocket feed authenticates with a first message `{"type":"auth","token":...}` instead of a token in the URL; a withdrawn Kazi application stays in the graduate's list with status `cancelled`; `POST /api/courses` creates the course at the staff member's own centre.
 
 TODO (the team): confirm whether `openapi.yaml` 0.1.0 had been handed off to Sherehe. If it had, the entry above is the record of the change; if not, this section can be folded into the original contract.
+
+## After handoff: version 0.3.0
+
+**All 24 operations, a `429 Too Many Requests` response (Week 9)**
+What changed: every operation documents a `429` (shared response `TooManyRequests`: a `Retry-After` header in seconds and the usual `{ "message": "..." }` body). `info.description` states the limits: 100 requests a minute per partner key, 120 a minute per client address for everything else, 10 a minute per address on `POST /api/auth/login` and `/register`. The `partnerKey` scheme says the key goes in the `X-API-Key` header. `info.version` goes from 0.2.0 to 0.3.0. No field, existing status code or existing behaviour changes; a caller that stays under the limits sees no difference.
+Why the original did not hold up: 0.2.0 said nothing about being refused for sending too much, so a partner's client could not know that a `429` can come, that `Retry-After` says how long to wait, or what the limits are.
+Also changed in the code, not the contract: a URL with broken percent-encoding (for example `/api/courses/%E0%A4%A`) now answers `400 { "message": "The URL is not valid." }` instead of Next's bare plain-text 500, and `POST /api/me/applications` refuses a `jobId` containing anything but letters, digits, `_` and `-` with the existing 400 message, instead of passing it on to Kazi. Both are inside the documented `400`. Found by `npm run security:probe` (SECURITY_AUDIT.md).
+Flagged to Sherehe: TODO. R8 says the team tells Sherehe's sub-team before this is deployed; Sherehe's client must treat a `429` as "wait `Retry-After` seconds, then retry". Nothing is deployed yet. (Sherehe's side had already taken 0.1.1 and 0.2.0 into its frozen copy on 2026-10-27; its pull request for that is not merged.)
 
 ## Entry format
 

@@ -18,7 +18,8 @@
     "db:seed": "tsx lib/db/seedData.ts",
     "key:issue": "tsx scripts/issuePartnerKey.ts",
     "test:partner": "jest --runInBand --testMatch '<rootDir>/partner-tests/**/*.test.ts'",
-    "ring:check": "tsx scripts/ringCheck.ts"
+    "ring:check": "tsx scripts/ringCheck.ts",
+    "security:probe": "tsx scripts/securityProbe.ts"
   },
   "dependencies": {
     "@next/env": "^16.4.2",

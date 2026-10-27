@@ -6,9 +6,9 @@ The script starts the server with the in-memory store, sends real requests to ev
 
 ## Latest run
 
-- Contract: `openapi.yaml` version 0.2.0 (OpenAPI 3.0.3).
+- Contract: `openapi.yaml` version 0.3.0 (OpenAPI 3.0.3).
 - Operations: 24 of 24 built, 0 not built yet.
-- Cases: 164 sent, 164 passed, 0 failed.
+- Cases: 174 sent, 174 passed, 0 failed.
 - Result: **PASS**
 
 "Fields checked" counts every field in the answer that was compared with the contract for its exact name, type, allowed values and format. Dates must be UTC with a Z and no milliseconds. A field the contract does not declare, or a declared field that is missing, fails the case.
@@ -181,6 +181,16 @@ The script starts the server with the in-memory store, sends real requests to ev
 | `DELETE /api/me/applications/{id}` | a staff member cannot: 403 | `/api/me/applications/app_1005` | 403 | 403 | 1 |  | pass |
 | `DELETE /api/me/applications/{id}` | no token: 401 | `/api/me/applications/app_1005` | 401 | 401 | 1 |  | pass |
 | `GET /api/me/applications/feed` | plain HTTP: 426, it is a WebSocket | `/api/me/applications/feed` | 426 | 426 | 1 |  | pass |
+| `GET /api/courses` | rate limit 3 a minute: 1st request is 200 | `/api/courses` | 200 | 200 | 120 |  | pass |
+| `GET /api/courses` | rate limit: 2nd request is 200 | `/api/courses` | 200 | 200 | 120 |  | pass |
+| `GET /api/courses` | rate limit: 3rd request is 200 | `/api/courses` | 200 | 200 | 120 |  | pass |
+| `GET /api/courses` | rate limit: 4th request is 429 with Retry-After | `/api/courses` | 429 | 429 | 1 |  | pass |
+| `POST /api/bookings` | rate limit: refused before it is validated or created: 429, nothing created | `/api/bookings` | 429 | 429 | 1 |  | pass |
+| `GET /api/courses` | the key used above is the only one limited: the main key still gets 200 | `/api/courses` | 200 | 200 | 120 |  | pass |
+| `POST /api/auth/login` | sign-in limit 2 a minute: 1st wrong password is 401 | `/api/auth/login` | 401 | 401 | 1 |  | pass |
+| `POST /api/auth/login` | sign-in limit: 2nd wrong password is 401 | `/api/auth/login` | 401 | 401 | 1 |  | pass |
+| `POST /api/auth/login` | sign-in limit: the 3rd attempt is 429, even with the right password | `/api/auth/login` | 429 | 429 | 1 |  | pass |
+| `GET /api/me` | restored: the limits are back to normal | `/api/me` | 200 | 200 | 6 |  | pass |
 
 ## Not built yet
 

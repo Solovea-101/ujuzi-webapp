@@ -3,6 +3,7 @@ import type { Duplex } from 'node:stream';
 import { loadEnvConfig } from '@next/env';
 import next from 'next';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { countPartnerKeys } from './lib/auth/partnerKey';
 import { getStore } from './lib/db';
 import { userForToken } from './lib/auth/session';
 import { prepareDatabase } from './lib/db/startup';
@@ -45,6 +46,16 @@ function onFeedConnection(ws: WebSocket, _req: IncomingMessage): void {
   ws.on('close', () => clearTimeout(timer));
 }
 
+/** False when the path has broken percent-encoding, such as a lone %E0 or a trailing %. */
+function hasDecodablePath(url: string | undefined): boolean {
+  try {
+    decodeURIComponent((url ?? '/').split('?')[0]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The whole app as one http.Server: Next's request handler plus the WebSocket upgrade hook.
  * Supertest and `npm start` both use it. Next prepares in the background; requests wait for it.
@@ -57,6 +68,15 @@ export function createServer(): Server {
   ready.catch((err) => console.error('Next failed to prepare:', err));
 
   const server = createHttpServer(async (req, res) => {
+    // The real peer address, for rate limiting. Always overwritten, so a client cannot choose its own.
+    req.headers['x-ujuzi-peer'] = req.socket.remoteAddress ?? 'unknown';
+    if (!hasDecodablePath(req.url)) {
+      // Next answers a path like /api/courses/%E0%A4%A with a bare 500 in plain text.
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ message: 'The URL is not valid.' }));
+      return;
+    }
     try {
       await ready;
       await handle(req, res);
@@ -108,6 +128,7 @@ async function main(): Promise<void> {
   loadEnvConfig(process.cwd(), isDev());
   const port = Number(process.env.PORT) || 3000;
   await prepareDatabase();
+  console.log(`Partner keys loaded: ${countPartnerKeys()}`); // a count only, never the keys
   const server = createServer();
 
   server.listen(port, () => {

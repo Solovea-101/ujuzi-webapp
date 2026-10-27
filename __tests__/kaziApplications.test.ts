@@ -168,6 +168,15 @@ describe('POST /api/me/applications', () => {
     expect((await (await graduate()).get('/api/me/applications')).body).toEqual([]);
   });
 
+  it('answers 400 for a jobId with markup or path characters in it, without asking Kazi', async () => {
+    for (const jobId of ['<script>alert(1)</script>', '../applications', 'job 1?x=1']) {
+      const res = await (await graduate()).post('/api/me/applications').send(apply({ jobId }));
+      expect(res.status).toBe(400);
+      expectErrorBody(res.body, 'jobId must be a text id of up to 64 characters, for example job_12345');
+    }
+    expect((await (await graduate()).get('/api/me/applications')).body).toEqual([]);
+  });
+
   it.each([
     ['no body', undefined, 'Request body must be a JSON object'],
     ['an empty object', {}, 'Missing required field(s): jobId, preferredDate'],
