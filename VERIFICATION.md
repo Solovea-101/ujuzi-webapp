@@ -6,9 +6,9 @@ The script starts the server with the in-memory store, sends real requests to ev
 
 ## Latest run
 
-- Contract: `openapi.yaml` version 0.3.0 (OpenAPI 3.0.3).
-- Operations: 24 of 24 built, 0 not built yet.
-- Cases: 174 sent, 174 passed, 0 failed.
+- Contract: `openapi.yaml` version 0.4.0 (OpenAPI 3.0.3).
+- Operations: 25 of 25 built, 0 not built yet.
+- Cases: 196 sent, 196 passed, 0 failed.
 - Result: **PASS**
 
 "Fields checked" counts every field in the answer that was compared with the contract for its exact name, type, allowed values and format. Dates must be UTC with a Z and no milliseconds. A field the contract does not declare, or a declared field that is missing, fails the case.
@@ -191,6 +191,28 @@ The script starts the server with the in-memory store, sends real requests to ev
 | `POST /api/auth/login` | sign-in limit: 2nd wrong password is 401 | `/api/auth/login` | 401 | 401 | 1 |  | pass |
 | `POST /api/auth/login` | sign-in limit: the 3rd attempt is 429, even with the right password | `/api/auth/login` | 429 | 429 | 1 |  | pass |
 | `GET /api/me` | restored: the limits are back to normal | `/api/me` | 200 | 200 | 6 |  | pass |
+| `GET /api/bookings/{bookingId}` | another partner's key: 404, as if it did not exist | `/api/bookings/bkg_6001` | 404 | 404 | 1 |  | pass |
+| `PUT /api/bookings/{bookingId}` | another partner's key: 404, unchanged | `/api/bookings/bkg_6001` | 404 | 404 | 1 | `GET /api/bookings/bkg_6001 -> 200` | pass |
+| `DELETE /api/bookings/{bookingId}` | another partner's key: 404, still there | `/api/bookings/bkg_6001` | 404 | 404 | 1 | `GET /api/bookings/bkg_6001 -> 200` | pass |
+| `POST /api/auth/password` | no token: 401 | `/api/auth/password` | 401 | 401 | 1 |  | pass |
+| `POST /api/auth/password` | no fields: 400 | `/api/auth/password` | 400 | 400 | 1 |  | pass |
+| `POST /api/auth/password` | a new password that is too short: 400 | `/api/auth/password` | 400 | 400 | 1 |  | pass |
+| `POST /api/auth/password` | the same password again: 400 | `/api/auth/password` | 400 | 400 | 1 |  | pass |
+| `POST /api/auth/password` | an unknown field: 400 | `/api/auth/password` | 400 | 400 | 1 |  | pass |
+| `POST /api/auth/password` | body over 20 KB: 413 | `/api/auth/password` | 413 | 413 | 1 |  | pass |
+| `POST /api/auth/password` | a wrong current password: 403 | `/api/auth/password` | 403 | 403 | 1 |  | pass |
+| `POST /api/auth/login` | a refused change changed nothing: the old password still signs in | `/api/auth/login` | 200 | 200 | 9 |  | pass |
+| `POST /api/auth/password` | changes it: 204 | `/api/auth/password` | 204 | 204 | 0 | `GET /api/me -> 200` | pass |
+| `POST /api/auth/login` | after the change the old password does not: 401 | `/api/auth/login` | 401 | 401 | 1 |  | pass |
+| `POST /api/auth/login` | after the change the new password signs in | `/api/auth/login` | 200 | 200 | 9 |  | pass |
+| `POST /api/auth/login` | lockout 2: 1st wrong password is 401 | `/api/auth/login` | 401 | 401 | 1 |  | pass |
+| `POST /api/auth/login` | lockout: 2nd wrong password is 401 | `/api/auth/login` | 401 | 401 | 1 |  | pass |
+| `POST /api/auth/login` | lockout: the 3rd attempt is 429 with Retry-After, even with the right password | `/api/auth/login` | 429 | 429 | 1 |  | pass |
+| `POST /api/auth/login` | lockout: an email with no account is locked the same way | `/api/auth/login` | 401 | 401 | 1 |  | pass |
+| `POST /api/auth/login` | lockout: ... the 2nd wrong password on it is 401 | `/api/auth/login` | 401 | 401 | 1 |  | pass |
+| `POST /api/auth/login` | lockout: ... and the 3rd is 429 | `/api/auth/login` | 429 | 429 | 1 |  | pass |
+| `POST /api/auth/password` | the password change is locked by the same lock: 429 | `/api/auth/password` | 429 | 429 | 1 |  | pass |
+| `GET /api/me` | restored: the lockout settings are back to normal | `/api/me` | 200 | 200 | 6 |  | pass |
 
 ## Not built yet
 

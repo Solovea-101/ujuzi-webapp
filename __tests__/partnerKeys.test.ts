@@ -1,7 +1,8 @@
 import request from 'supertest';
 import { resetStore } from '@/lib/db';
-import { generatePartnerKey, hasValidPartnerKey, hashKey } from '@/lib/auth/partnerKey';
+import { countPartnerKeys, generatePartnerKey, hasValidPartnerKey, hashKey, partnerForKey } from '@/lib/auth/partnerKey';
 import { OTHER_PARTNER_KEY, partner, PARTNER_KEY, startServer, type TestServer } from './helpers/server';
+import { as, login, SEEDED } from './helpers/auth';
 import { expectErrorBody, inDays } from './helpers/shapes';
 
 let app: TestServer;
@@ -184,5 +185,66 @@ describe('what needs no key', () => {
   it('answers an unknown path with its own 404, not a 401', async () => {
     const res = await request(app.server).get('/api/nothing-here');
     expect(res.status).toBe(404);
+  });
+});
+
+describe('partner names on keys', () => {
+  it('reads name:hash entries, and calls a bare hash "default"', () => {
+    process.env.PARTNER_KEYS = `sherehe:${hashKey('one')}, other-2:${hashKey('two')},${hashKey('three')}`;
+    expect(partnerForKey('one')).toBe('sherehe');
+    expect(partnerForKey('two')).toBe('other-2');
+    expect(partnerForKey('three')).toBe('default');
+    expect(partnerForKey('four')).toBeUndefined();
+    expect(countPartnerKeys()).toBe(3);
+  });
+
+  it('ignores an entry with a bad name or a bad hash, and the good ones still work', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    process.env.PARTNER_KEYS = `Bad Name:${hashKey('x')},sherehe:nothash,sherehe:${hashKey('good')}`;
+    expect(partnerForKey('x')).toBeUndefined();
+    expect(partnerForKey('good')).toBe('sherehe');
+    expect(countPartnerKeys()).toBe(1);
+    warn.mockRestore();
+  });
+});
+
+describe('a booking belongs to the key that made it', () => {
+  const asOther = (method: 'get' | 'put' | 'delete', path: string) => request(app.server)[method](path).set('X-API-Key', OTHER_PARTNER_KEY);
+
+  it('answers 404 to another key for every read, change and cancel, and changes nothing', async () => {
+    for (const [method, path] of [['get', '/api/bookings/bkg_6001'], ['put', '/api/bookings/bkg_6001'], ['delete', '/api/bookings/bkg_6001']] as const) {
+      const req = asOther(method, path);
+      const res = await (method === 'put' ? req.send(change) : req);
+      expect(res.status).toBe(404);
+      expectErrorBody(res.body, 'Booking bkg_6001 not found');
+    }
+    const still = await partner(app).get('/api/bookings/bkg_6001');
+    expect(still.status).toBe(200);
+    expect(still.body.crewSize).toBe(6);
+  });
+
+  it('files a new booking under the key that posted it: only that key can see it', async () => {
+    const created = await request(app.server).post('/api/bookings').set('X-API-Key', OTHER_PARTNER_KEY).send(body);
+    expect(created.status).toBe(201);
+    const id = created.body.id as string;
+    expect((await asOther('get', `/api/bookings/${id}`)).status).toBe(200);
+    expect((await partner(app).get(`/api/bookings/${id}`)).status).toBe(404);
+    expect((await partner(app).delete(`/api/bookings/${id}`)).status).toBe(404);
+    expect((await asOther('delete', `/api/bookings/${id}`)).status).toBe(204);
+  });
+
+  it('lets two keys each hold a pending booking for the same event, but not one key twice', async () => {
+    const post = (key: string) => request(app.server).post('/api/bookings').set('X-API-Key', key).send(body);
+    expect((await post(PARTNER_KEY)).status).toBe(201);
+    expect((await post(OTHER_PARTNER_KEY)).status).toBe(201);
+    expect((await post(PARTNER_KEY)).status).toBe(409);
+  });
+
+  it('is not tied to the key for staff: staff of the centre still see and decide it', async () => {
+    const created = await request(app.server).post('/api/bookings').set('X-API-Key', OTHER_PARTNER_KEY).send(body);
+    const token = await login(app, SEEDED.westlands);
+    const list = await as(app, token).get('/api/bookings');
+    expect(list.body.map((b: { id: string }) => b.id)).toContain(created.body.id);
+    expect((await as(app, token).patch(`/api/bookings/${created.body.id}`).send({ status: 'confirmed' })).status).toBe(200);
   });
 });

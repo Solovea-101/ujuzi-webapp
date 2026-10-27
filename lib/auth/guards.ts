@@ -2,7 +2,7 @@ import type { NextRequest, NextResponse } from 'next/server';
 import { getStore } from '@/lib/db';
 import type { UserRow } from '@/lib/db/types';
 import { fail, type ErrorBody } from '@/lib/http';
-import { hasValidPartnerKey } from './partnerKey';
+import { hasValidPartnerKey, partnerForKey } from './partnerKey';
 import { bearerToken, userForToken } from './session';
 
 /** Either the caller may go on, or here is the answer to send. */
@@ -11,9 +11,12 @@ export type UserGuard = { ok: true; user: UserRow; token: string } | { ok: false
 
 const NEEDS_LOGIN = 'Log in and send Authorization: Bearer YOUR_TOKEN';
 
+export type PartnerGuard = { ok: true; partner: string } | { ok: false; response: NextResponse<ErrorBody> };
+
 /** The partner endpoints (Sherehe): a valid X-API-Key, checked before anything else, even the body. */
-export function requirePartner(req: NextRequest): Guard {
-  if (hasValidPartnerKey(req.headers.get('x-api-key'))) return { ok: true };
+export function requirePartner(req: NextRequest): PartnerGuard {
+  const partner = partnerForKey(req.headers.get('x-api-key'));
+  if (partner) return { ok: true, partner };
   return { ok: false, response: fail(401, 'Send your partner key as X-API-Key') };
 }
 

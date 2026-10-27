@@ -40,7 +40,7 @@ With no `DATABASE_URL` the data lives in memory and is reset to the sample data 
 
 ## Authentication
 
-- **Partner systems** (Sherehe) send `X-API-Key: YOUR_KEY` on every partner call (Endpoints 1 to 7). Only a SHA-256 hash of each key is stored, in `PARTNER_KEYS` (Render's settings, never git). Make a key and its hash with `npm run key:issue -- sherehe`; give the partner the key once, put the hash in `PARTNER_KEYS`. With no key configured every partner call is a 401. TODO: how a tester gets a demo key for the live deployment.
+- **Partner systems** (Sherehe) send `X-API-Key: YOUR_KEY` on every partner call (Endpoints 1 to 7). Only a SHA-256 hash of each key is stored, in `PARTNER_KEYS` (Render's settings, never git), as `name:hash` entries such as `sherehe:<hash>`; the name says whose key it is. Make a key and its entry with `npm run key:issue -- sherehe`; give the partner the key once, put the entry in `PARTNER_KEYS`. **A booking belongs to the partner whose key made it:** another partner's key gets `404` for it, the same answer as for a booking that does not exist. With no key configured every partner call is a 401. TODO: how a tester gets a demo key for the live deployment.
 - **Graduates and staff** on the website log in with `POST /api/auth/login` and then send `Authorization: Bearer YOUR_TOKEN`. A token is valid for 7 days and stops working at once on `POST /api/auth/logout`.
 - **Every endpoint needs one or the other**, except `POST /api/auth/register` and `POST /api/auth/login` (you have no token before them) and the website's pages and `openapi.yaml`. No key or token is a `401`; a wrong key is the same `401`, with the same words, so a guesser learns nothing. Keys are never in the code or the repository: they live in the environment (`PARTNER_KEYS`, hashes only), one key per consuming system, so one partner's key can be withdrawn without touching another's.
 - The course and certificate reads accept either, because a browser cannot hold a partner key. The booking endpoints (`POST`, `PUT`, `DELETE`) take a partner key only; the staff endpoints take a login token only.
@@ -165,7 +165,11 @@ content-type: application/json
 {"message":"Too many requests. Try again in 60 seconds."}
 ```
 
-Wait that long, then carry on. The counters live in the server's memory, so a restart clears them and two servers would each count on their own; behind a proxy set `TRUST_PROXY=true` (see `.env.example`). `evidence/week09/` has a real run showing `200 200 200 429 429`.
+Wait that long, then carry on. The counters live in the server's memory, so a restart clears them and two servers would each count on their own; behind a proxy set `TRUST_PROXY=true` and `TRUST_PROXY_HOPS` (see `.env.example`, which also says how to find the right number on a new host).
+
+**Sign-in lockout.** Five wrong passwords in a row for one email address lock that address for 15 minutes: `POST /api/auth/login` answers `429` with `Retry-After`, even for the right password. The lock is kept in the database, so a restart does not clear it, and an email with no account is locked in the same way, so the answer never says who is registered. A good sign-in clears the count.
+
+**Changing a password.** `POST /api/auth/password` with `{"currentPassword": "...", "newPassword": "..."}` (8 to 128 characters, different from the old one) and your token answers `204`. Every other login of yours ends at once; the one that asked keeps working. A wrong current password is `403` and counts towards the same lock. Email-based "forgot my password" is not built: it needs an email service. `evidence/week09/` has a real run showing `200 200 200 429 429`.
 
 A missing or wrong key looks like this (the key is never echoed back):
 
@@ -188,11 +192,12 @@ Every failure answers with one field, `message`, in plain English, and nothing i
 |---|---|---|
 | 400 | The request is wrong | Missing field, wrong type, unknown field, a date in the past, 30 February, a malformed certificate number or URL |
 | 401 | No valid key or token | Missing `X-API-Key`, a wrong key, or an expired login |
-| 403 | Not allowed | Staff deciding another centre's booking; a graduate calling a staff endpoint; staff sign-up when no invite code is set |
+| 403 | Not allowed | Staff deciding another centre's booking; a graduate calling a staff endpoint; staff sign-up when no invite code is set; a wrong current password when changing it |
 | 404 | No such id | A mistyped id, a cancelled booking, someone else's application |
 | 409 | Not allowed in the current state | Changing or cancelling a confirmed booking; a second pending booking for the same event; enrolling twice |
+| 405 | The URL does not accept that method | `PUT /api/courses` |
 | 413 | Body too large | More than 20 KB of JSON |
-| 429 | Too many requests | Over the rate limit above; read `Retry-After` and wait |
+| 429 | Too many requests | Over the rate limit above, or an email locked after five wrong passwords; read `Retry-After` and wait |
 | 426 | Upgrade Required | Plain HTTP to the WebSocket endpoint |
 | 502 | Kazi Connect could not be reached | Kazi asleep or down; Ujuzi's other endpoints keep working. Try again in a minute |
 
@@ -224,7 +229,7 @@ npm run verify
 
 `npm run verify` starts the app, sends every case in `scripts/verifyCases.ts` and compares each real answer with `openapi.yaml` field by field, then writes `VERIFICATION.md`. Other scripts: `npm run test:partner` (our tests of Kazi Connect, `KAZI_URL=http://localhost:4002 npm run test:partner`), `npm run ring:check` (one end-to-end look at Kazi and Ujuzi; needs `UJUZI_API_KEY`), `npm run security:probe` (the Week 9 attacks against a running copy; see `SECURITY_AUDIT.md`), `npm run key:issue`, `npm run types`.
 
-Settings (environment variables, see `.env.example`): `PORT` (default 3000), `DATABASE_URL`, `PARTNER_KEYS` (hashes of the keys we accept), `SESSION_SECRET` (set a long random value outside local runs), `KAZI_API_URL` and `KAZI_WS_URL` (our upstream), `STAFF_INVITE_CODE` (opens staff sign-up; closed when unset), `RATE_LIMIT_PARTNER`, `RATE_LIMIT_ANON`, `RATE_LIMIT_LOGIN`, `RATE_LIMIT_WINDOW_MS` and `TRUST_PROXY` (rate limiting, see above), `SEED_ON_START` and `SEED_PASSWORD` (demo data only: anyone who can reach a seeded deployment can log in as the sample staff with the default password, so set `SEED_PASSWORD`).
+Settings (environment variables, see `.env.example`): `PORT` (default 3000), `DATABASE_URL`, `PARTNER_KEYS` (`name:hash` of the keys we accept), `SESSION_SECRET` (set a long random value outside local runs), `KAZI_API_URL` and `KAZI_WS_URL` (our upstream), `STAFF_INVITE_CODE` (opens staff sign-up; closed when unset), `RATE_LIMIT_PARTNER`, `RATE_LIMIT_ANON`, `RATE_LIMIT_LOGIN`, `RATE_LIMIT_WINDOW_MS`, `TRUST_PROXY`, `TRUST_PROXY_HOPS` and `LOG_CLIENT_ADDRESS` (rate limiting, see above), `LOCKOUT_MAX_FAILURES`, `LOCKOUT_WINDOW_MINUTES` and `LOCKOUT_MINUTES` (sign-in lockout), `SEED_ON_START` and `SEED_PASSWORD` (demo data only: anyone who can reach a seeded deployment can log in as the sample staff with the default password, so set `SEED_PASSWORD`).
 
 ## More documents
 

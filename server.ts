@@ -1,4 +1,4 @@
-import { createServer as createHttpServer, type IncomingMessage, type Server } from 'node:http';
+import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { loadEnvConfig } from '@next/env';
 import next from 'next';
@@ -57,6 +57,37 @@ function hasDecodablePath(url: string | undefined): boolean {
 }
 
 /**
+ * Next answers a method a route does not have (PUT /api/courses) with a bare, empty 405. Every error here is
+ * { "message": "..." }, so on /api paths an empty 405 gets that body. Allow is not sent: Next does not say
+ * which methods the route has, and saying so wrongly would be worse than saying nothing.
+ */
+function jsonFor405(req: IncomingMessage, res: ServerResponse): void {
+  if (!(req.url ?? '').startsWith('/api/')) return;
+  const writeHead = res.writeHead.bind(res) as (...args: unknown[]) => ServerResponse;
+  const end = res.end.bind(res) as (...args: unknown[]) => ServerResponse;
+  let wrote = false;
+  const write = res.write.bind(res) as (...args: unknown[]) => boolean;
+  res.write = ((...args: unknown[]) => {
+    wrote = true;
+    return write(...args);
+  }) as typeof res.write;
+  res.writeHead = ((status: number, ...args: unknown[]) => {
+    if (status === 405 && !res.headersSent) res.setHeader('Content-Type', 'application/json');
+    return writeHead(status, ...args);
+  }) as typeof res.writeHead;
+  res.end = ((...args: unknown[]) => {
+    const chunk = args[0];
+    const hasChunk = typeof chunk === 'string' ? chunk.length > 0 : chunk instanceof Uint8Array ? chunk.length > 0 : false;
+    const empty = !wrote && !hasChunk;
+    if (res.statusCode === 405 && empty) {
+      if (!res.headersSent) res.setHeader('Content-Type', 'application/json');
+      return end(JSON.stringify({ message: 'This URL does not accept that method' }));
+    }
+    return end(...args);
+  }) as typeof res.end;
+}
+
+/**
  * The whole app as one http.Server: Next's request handler plus the WebSocket upgrade hook.
  * Supertest and `npm start` both use it. Next prepares in the background; requests wait for it.
  */
@@ -77,6 +108,7 @@ export function createServer(): Server {
       res.end(JSON.stringify({ message: 'The URL is not valid.' }));
       return;
     }
+    jsonFor405(req, res);
     try {
       await ready;
       await handle(req, res);

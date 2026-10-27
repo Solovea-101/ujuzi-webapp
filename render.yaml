@@ -19,9 +19,12 @@ services:
       - key: SESSION_SECRET
         generateValue: true
       - key: PARTNER_KEYS
-        sync: false # SHA-256 hashes of the keys issued to Sherehe: `npm run key:issue -- sherehe`
+        sync: false # name:hash entries, e.g. sherehe:<sha-256 of the key>: `npm run key:issue -- sherehe` prints the entry
       - key: TRUST_PROXY
         value: "true" # Render's proxy appends the caller's address to X-Forwarded-For; the rate limiter reads it
+      # TRUST_PROXY_HOPS (default 1) is how many proxies are in front of us. Render's chain is not documented well
+      # enough to assume: on the first deploy add LOG_CLIENT_ADDRESS=true, call from two networks, read the
+      # "client-address:" lines in the log, set TRUST_PROXY_HOPS to match, then remove LOG_CLIENT_ADDRESS.
       - key: KAZI_API_URL
         value: https://kaziconnect1-1xmu.onrender.com
       - key: KAZI_WS_URL

@@ -66,6 +66,15 @@ Why the original did not hold up: 0.2.0 said nothing about being refused for sen
 Also changed in the code, not the contract: a URL with broken percent-encoding (for example `/api/courses/%E0%A4%A`) now answers `400 { "message": "The URL is not valid." }` instead of Next's bare plain-text 500, and `POST /api/me/applications` refuses a `jobId` containing anything but letters, digits, `_` and `-` with the existing 400 message, instead of passing it on to Kazi. Both are inside the documented `400`. Found by `npm run security:probe` (SECURITY_AUDIT.md).
 Flagged to Sherehe: TODO. R8 says the team tells Sherehe's sub-team before this is deployed; Sherehe's client must treat a `429` as "wait `Retry-After` seconds, then retry". Nothing is deployed yet. (Sherehe's side had already taken 0.1.1 and 0.2.0 into its frozen copy on 2026-10-27; its pull request for that is not merged.)
 
+## After handoff: version 0.4.0
+
+**Endpoint 25, `POST /api/auth/password` (new); Endpoints 5, 6 and 7 (S4, S5): a booking belongs to the key that made it; login and the password change: a lock after repeated wrong passwords**
+What changed: one new operation, `POST /api/auth/password` (a logged in user changes their own password; `204`, `400`, `401`, `403`, `413`, `429`), with a `PasswordChange` schema. The description now says that a booking belongs to the partner whose key created it, that another partner's key gets `404` on read, change and cancel, that five wrong passwords in a row for one email lock that address for 15 minutes (`429` with `Retry-After`, kept in the database), and that a URL which does not accept the method answers `405 { "message" }` and broken percent-encoding answers `400`. `TooManyRequests` says it can also mean a locked email. `info.version` goes from 0.3.0 to 0.4.0.
+What Sherehe notices: nothing, with one key. Sherehe's calls to Endpoints 1 to 7 are unchanged, and the bookings it made before this change are filed under `sherehe` by the migration. The one requirement is on our side of the key: `PARTNER_KEYS` entries are now `name:hash`, and Sherehe's must be named `sherehe` to see the bookings made before the change (an unnamed entry is named `default`). A second partner would get its own name and could not see Sherehe's bookings, and the duplicate-booking rule (one pending booking per course and event name) now applies per partner.
+Why the original did not hold up: 0.3.0 let any issued key read, change or cancel any booking by its id, which is only safe while there is one partner; and it said nothing about password guessing beyond a per-address rate, which one person with many addresses gets round.
+Flagged to Sherehe: TODO. The Sherehe agent has been told in the ring conversation (2026-10-27) that bookings are scoped by key; the team still tells Sherehe's sub-team before this is deployed (R8). Sherehe's frozen copy is still 0.2.0; replacing it with 0.4.0 is a handoff step for the team.
+Not in the contract (code only): the proxy settings `TRUST_PROXY_HOPS` and `LOG_CLIENT_ADDRESS`, `Cache-Control: no-store`, the security headers.
+
 ## Entry format
 
 For each change:

@@ -4,34 +4,54 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 export const hashKey = (key: string): string => createHash('sha256').update(key).digest('hex');
 
 const HASH = /^[0-9a-f]{64}$/;
+const NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+/** The partner an entry without a name belongs to. Name every key (name:hash) so each partner is told apart. */
+export const UNNAMED_PARTNER = 'default';
 let warnedAboutEntries = false;
 
-/** The hashes in PARTNER_KEYS (comma separated). Read on every call, so a change takes effect at once. */
-function configuredHashes(): Buffer[] {
-  const entries = (process.env.PARTNER_KEYS ?? '').split(',').map((entry) => entry.trim().toLowerCase()).filter(Boolean);
-  const valid = entries.filter((entry) => HASH.test(entry));
-  if (valid.length < entries.length && !warnedAboutEntries) {
-    warnedAboutEntries = true;
-    console.warn('PARTNER_KEYS has entries that are not SHA-256 hashes (64 hex characters); they are ignored.');
-  }
-  return valid.map((hash) => Buffer.from(hash, 'hex'));
+interface ConfiguredKey {
+  partner: string;
+  hash: Buffer;
 }
 
 /**
- * True when the X-API-Key a caller sent hashes to one of the keys we issued. Only hashes are ever
- * stored (in PARTNER_KEYS, in Render's settings), never the keys. With no keys configured nothing
+ * The entries of PARTNER_KEYS (comma separated), each "name:hash" or just "hash". The name says whose key it
+ * is, and is what a booking is filed under. Read on every call, so a change takes effect at once.
+ */
+function configuredKeys(): ConfiguredKey[] {
+  const entries = (process.env.PARTNER_KEYS ?? '').split(',').map((entry) => entry.trim().toLowerCase()).filter(Boolean);
+  const keys: ConfiguredKey[] = [];
+  for (const entry of entries) {
+    const colon = entry.lastIndexOf(':');
+    const partner = colon === -1 ? UNNAMED_PARTNER : entry.slice(0, colon);
+    const hash = colon === -1 ? entry : entry.slice(colon + 1);
+    if (HASH.test(hash) && NAME.test(partner)) keys.push({ partner, hash: Buffer.from(hash, 'hex') });
+  }
+  if (keys.length < entries.length && !warnedAboutEntries) {
+    warnedAboutEntries = true;
+    console.warn('PARTNER_KEYS has entries that are not "name:hash" or a SHA-256 hash (64 hex characters); they are ignored.');
+  }
+  return keys;
+}
+
+/**
+ * The partner a presented X-API-Key belongs to, or undefined when it matches no key we issued. Only hashes are
+ * ever stored (in PARTNER_KEYS, in Render's settings), never the keys. With no keys configured nothing
  * matches, so partner endpoints stay closed rather than open.
  */
-export function hasValidPartnerKey(presented: string | null): boolean {
-  if (!presented) return false;
+export function partnerForKey(presented: string | null): string | undefined {
+  if (!presented) return undefined;
   const candidate = Buffer.from(hashKey(presented), 'hex');
-  let matched = false;
+  let partner: string | undefined;
   // Compare against every hash with no early exit, so timing does not say which one was close.
-  for (const hash of configuredHashes()) {
-    if (timingSafeEqual(candidate, hash)) matched = true;
+  for (const key of configuredKeys()) {
+    if (timingSafeEqual(candidate, key.hash)) partner = key.partner;
   }
-  return matched;
+  return partner;
 }
+
+/** True when the X-API-Key a caller sent is one we issued. */
+export const hasValidPartnerKey = (presented: string | null): boolean => partnerForKey(presented) !== undefined;
 
 /** A new random key and its hash. Give the key to the partner once; put only the hash in PARTNER_KEYS. */
 export function generatePartnerKey(): { key: string; hash: string } {
@@ -40,4 +60,4 @@ export function generatePartnerKey(): { key: string; hash: string } {
 }
 
 /** How many valid key hashes are configured, for the start-up log. Never the hashes or the keys themselves. */
-export const countPartnerKeys = (): number => configuredHashes().length;
+export const countPartnerKeys = (): number => configuredKeys().length;

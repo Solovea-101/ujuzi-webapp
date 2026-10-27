@@ -107,11 +107,11 @@ export async function seedStore(store: Store): Promise<boolean> {
   await store.revokeCertificate('UJZ-2026-00124');
 
   await store.createBooking({
-    course_id: catering.id, event_name: 'Wanjiku and Otieno wedding', crew_size: 6, preferred_start: new Date('2026-11-28T08:00:00Z'),
+    course_id: catering.id, event_name: 'Wanjiku and Otieno wedding', crew_size: 6, preferred_start: new Date('2026-11-28T08:00:00Z'), partner: 'sherehe',
   });
   // A confirmed booking, so changing or cancelling one has a 409 case.
   const reunion = await store.createBooking({
-    course_id: courseRows[1].id, event_name: 'Kamau family reunion', crew_size: 10, preferred_start: new Date('2026-12-12T08:00:00Z'),
+    course_id: courseRows[1].id, event_name: 'Kamau family reunion', crew_size: 10, preferred_start: new Date('2026-12-12T08:00:00Z'), partner: 'sherehe',
   });
   await store.decideBooking(reunion.id, 'confirmed');
 

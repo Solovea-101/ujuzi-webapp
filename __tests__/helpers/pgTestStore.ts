@@ -5,7 +5,7 @@ import { PgStore } from '@/lib/db/pgStore';
 /** Set TEST_DATABASE_URL to run the store tests against PostgreSQL too. */
 export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 
-const TABLES = 'centres, courses, users, sessions, enrolments, certificates, bookings, kazi_applications';
+const TABLES = 'centres, courses, users, sessions, enrolments, certificates, bookings, kazi_applications, sign_in_failures';
 const SEQUENCES = ['centre', 'course', 'graduate', 'staff', 'enrolment', 'booking', 'certificate'];
 
 /**

@@ -1,8 +1,8 @@
-# Ujuzi API contract 0.3.0: the partner endpoints 1-7 and 24 (Sherehe, needs S1-S5) and the website endpoints 8-23.
+# Ujuzi API contract 0.4.0: the partner endpoints 1-7 and 24 (Sherehe, needs S1-S5) and the website endpoints 8-23 and 25.
 openapi: 3.0.3
 info:
   title: Ujuzi API
-  version: 0.3.0
+  version: 0.4.0
   description: >
     Short courses, certificate checks and group training bookings for Sherehe (needs S1-S5), plus the
     Ujuzi website: accounts, enrolments, live Kazi Connect job matches and applications, and the staff
@@ -17,7 +17,17 @@ info:
     Rate limits, per minute: a partner key may make 100 requests; any other caller (website users,
     anonymous callers, wrong keys) 120 per network address; and sign-in attempts (login and register) 10
     per address. Past the limit the answer is 429 with a Retry-After header (seconds) and a message.
-    The limits are per server copy and reset when it restarts.
+    The limits are per server copy and reset when it restarts. Separately, five wrong passwords in a row for
+    one email address lock that address for 15 minutes: login answers 429 with a Retry-After header, even
+    for the right password, and the lock is kept in the database, so a restart does not clear it.
+
+
+    A booking belongs to the partner whose key created it. Another partner's key gets 404 for it, the
+    same answer as for a booking that does not exist, on read, change and cancel.
+
+
+    A URL that does not accept the method used answers 405 with a message; a URL with broken
+    percent-encoding answers 400.
 servers:
   - url: http://localhost:3000
     description: Local development server
@@ -376,6 +386,27 @@ paths:
         '401': { $ref: '#/components/responses/LoginRequired' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  /api/auth/password:
+    post:
+      summary: Change the logged in user's password (Endpoint 25, G1)
+      description: >
+        Order of checks: login (401), body (400, 413), too many wrong passwords lately (429), the current
+        password (403). Every other login of the user ends at once; the token that made the call keeps
+        working. A wrong current password counts towards the same lock as a wrong sign-in.
+      security: [{ userToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordChange' }
+      responses:
+        '204': { description: The password was changed }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/LoginRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /api/me:
     get:
       summary: The logged in user (Endpoint 11, G1)
@@ -626,7 +657,8 @@ components:
       description: >
         The caller has used its allowance for this minute (100 requests per partner key, 120 per network
         address for everyone else, 10 sign-in attempts per address). Nothing was changed; wait Retry-After
-        seconds and try again.
+        seconds and try again. On login and the password change the 429 can also mean that the email
+        address is locked after five wrong passwords; Retry-After says how long.
       headers:
         Retry-After:
           description: Whole seconds until the caller's allowance starts again
@@ -818,6 +850,19 @@ components:
       properties:
         email: { type: string, format: email, example: achieng.otieno@example.com }
         password: { type: string, example: 'a long passphrase' }
+
+    PasswordChange:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, minLength: 1, maxLength: 128, example: 'a long passphrase' }
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Must differ from currentPassword
+          example: 'a much better passphrase'
 
     AuthResponse:
       type: object

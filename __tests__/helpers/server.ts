@@ -11,7 +11,8 @@ process.env.DATABASE_URL = '';
 // The partner key every test sends. Only its hash is configured, exactly as in production.
 export const PARTNER_KEY = 'ujz_test_key_for_the_test_suite_only';
 export const OTHER_PARTNER_KEY = 'ujz_a_second_partner_key_for_tests';
-process.env.PARTNER_KEYS = [hashKey(PARTNER_KEY), hashKey(OTHER_PARTNER_KEY)].join(',');
+// Named, as in production: Sherehe's bookings are filed under "sherehe", the other key is "other".
+process.env.PARTNER_KEYS = [`sherehe:${hashKey(PARTNER_KEY)}`, `other:${hashKey(OTHER_PARTNER_KEY)}`].join(',');
 
 // Next's own flag for running inside Jest (see loadConfig in next/dist/server/config.js): it then
 // loads next.config.ts with require() instead of its TypeScript loader. Without it, `prepare()`

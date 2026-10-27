@@ -11,6 +11,6 @@ const { key, hash } = generatePartnerKey();
 console.log(`Partner: ${partner}\n`);
 console.log('Key. Give it to the partner once, over a private channel. It is not stored anywhere:');
 console.log(`  ${key}\n`);
-console.log('Hash. Add it to PARTNER_KEYS in Render (several hashes are separated by commas):');
-console.log(`  ${hash}\n`);
+console.log('Entry. Add it to PARTNER_KEYS in Render (several entries are separated by commas). The name is the partner it belongs to:');
+console.log(`  ${partner.toLowerCase()}:${hash}\n`);
 console.log('The partner sends the key as the X-API-Key header on every partner request.');

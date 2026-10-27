@@ -25,6 +25,7 @@ import {
   type NewEnrolment,
   type NewKaziApplication,
   type NewSession,
+  type SignInState,
   type NewUser,
   type SessionRow,
   type Store,
@@ -207,6 +208,54 @@ export class PgStore implements Store {
     await this.pool.query('DELETE FROM sessions WHERE token_hash = $1', [tokenHash]);
   }
 
+  async deleteSessionsForUser(userId: string, exceptTokenHash?: string): Promise<void> {
+    await this.pool.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash IS DISTINCT FROM $2', [userId, exceptTokenHash ?? null]);
+  }
+
+  async updateUserPassword(userId: string, passwordHash: string): Promise<void> {
+    await this.pool.query('UPDATE users SET password_hash = $2 WHERE id = $1', [userId, passwordHash]);
+  }
+
+  // ---- Failed sign-ins --------------------------------------------------------------------------
+
+  async getSignInLock(emailKey: string, now: Date): Promise<Date | undefined> {
+    const row = await this.one<{ locked_until: Date | null }>(
+      'SELECT locked_until FROM sign_in_failures WHERE email_key = $1 AND locked_until > $2',
+      [emailKey, now],
+    );
+    return row?.locked_until ? new Date(row.locked_until) : undefined;
+  }
+
+  // One INSERT ... ON CONFLICT, so two failures at the same moment are both counted.
+  async recordSignInFailure(emailKey: string, now: Date, maxFailures: number, windowMs: number, lockMs: number): Promise<SignInState> {
+    // The count after this failure: it starts again from 1 when the last failure is older than the window.
+    const next = `CASE WHEN sign_in_failures.last_failure_at < $2::timestamptz - $4::double precision * interval '1 millisecond'
+                       THEN 1 ELSE sign_in_failures.failures + 1 END`;
+    const row = await this.one<{ failures: number; locked_until: Date | null }>(
+      `INSERT INTO sign_in_failures (email_key, failures, last_failure_at, locked_until)
+       VALUES ($1, 1, $2::timestamptz, CASE WHEN 1 >= $3::integer THEN $2::timestamptz + $5::double precision * interval '1 millisecond' END)
+       ON CONFLICT (email_key) DO UPDATE SET
+         failures = ${next},
+         last_failure_at = $2::timestamptz,
+         locked_until = CASE WHEN ${next} >= $3::integer
+                             THEN $2::timestamptz + $5::double precision * interval '1 millisecond'
+                             ELSE sign_in_failures.locked_until END
+       RETURNING failures, locked_until`,
+      [emailKey, now, maxFailures, windowMs, lockMs],
+    );
+    const lockedUntil = row!.locked_until && new Date(row!.locked_until).getTime() > now.getTime() ? new Date(row!.locked_until) : null;
+    // Reaching the limit sets the lock and starts the count again, as MemoryStore does.
+    if (lockedUntil && row!.failures >= maxFailures) {
+      await this.pool.query('UPDATE sign_in_failures SET failures = 0 WHERE email_key = $1', [emailKey]);
+      return { failures: 0, lockedUntil };
+    }
+    return { failures: row!.failures, lockedUntil };
+  }
+
+  async clearSignInFailures(emailKey: string): Promise<void> {
+    await this.pool.query('DELETE FROM sign_in_failures WHERE email_key = $1', [emailKey]);
+  }
+
   // ---- Enrolments -------------------------------------------------------------------------------
 
   createEnrolment(input: NewEnrolment): Promise<EnrolmentRow> {
@@ -286,9 +335,9 @@ export class PgStore implements Store {
     return this.run(async () => {
       const id = await this.nextId('booking');
       return (await this.one<BookingRow>(
-        `INSERT INTO bookings (id, course_id, event_name, crew_size, preferred_start)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [id, input.course_id, input.event_name, input.crew_size, input.preferred_start],
+        `INSERT INTO bookings (id, course_id, event_name, crew_size, preferred_start, partner)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [id, input.course_id, input.event_name, input.crew_size, input.preferred_start, input.partner],
       ))!;
     });
   }
@@ -305,6 +354,11 @@ export class PgStore implements Store {
     );
   }
 
+  // A booking's partner never changes, so checking it just before the atomic change cannot race.
+  private async ownedBy(id: string, partner: string): Promise<boolean> {
+    return (await this.one<{ id: string }>('SELECT id FROM bookings WHERE id = $1 AND partner = $2', [id, partner])) !== undefined;
+  }
+
   // The change and the "still pending" check are one UPDATE or DELETE, so they cannot race. When
   // it changes nothing, a second read tells "no such booking" from "no longer pending".
   private async pendingOnly(statement: string, params: unknown[]): Promise<BookingOutcome> {
@@ -314,7 +368,8 @@ export class PgStore implements Store {
     return existing ? { kind: 'not_pending', booking: existing } : { kind: 'not_found' };
   }
 
-  updateBooking(id: string, change: BookingChange): Promise<BookingOutcome> {
+  async updateBooking(id: string, change: BookingChange, partner?: string): Promise<BookingOutcome> {
+    if (partner !== undefined && !(await this.ownedBy(id, partner))) return { kind: 'not_found' };
     return this.pendingOnly(
       "UPDATE bookings SET crew_size = $2, preferred_start = $3 WHERE id = $1 AND status = 'pending' RETURNING *",
       [id, change.crew_size, change.preferred_start],
@@ -325,7 +380,8 @@ export class PgStore implements Store {
     return this.pendingOnly("UPDATE bookings SET status = $2 WHERE id = $1 AND status = 'pending' RETURNING *", [id, status]);
   }
 
-  deleteBooking(id: string): Promise<BookingOutcome> {
+  async deleteBooking(id: string, partner?: string): Promise<BookingOutcome> {
+    if (partner !== undefined && !(await this.ownedBy(id, partner))) return { kind: 'not_found' };
     return this.pendingOnly("DELETE FROM bookings WHERE id = $1 AND status = 'pending' RETURNING *", [id]);
   }
 
