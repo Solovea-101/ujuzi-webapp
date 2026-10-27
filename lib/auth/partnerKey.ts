@@ -38,3 +38,6 @@ export function generatePartnerKey(): { key: string; hash: string } {
   const key = `ujz_${randomBytes(32).toString('base64url')}`;
   return { key, hash: hashKey(key) };
 }
+
+/** How many valid key hashes are configured, for the start-up log. Never the hashes or the keys themselves. */
+export const countPartnerKeys = (): number => configuredHashes().length;

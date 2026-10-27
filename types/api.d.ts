@@ -36,6 +36,7 @@ export interface paths {
                 };
                 400: components["responses"]["BadRequest"];
                 401: components["responses"]["UnauthorizedEither"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         put?: never;
@@ -71,6 +72,7 @@ export interface paths {
                 401: components["responses"]["LoginRequired"];
                 403: components["responses"]["Forbidden"];
                 413: components["responses"]["PayloadTooLarge"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         delete?: never;
@@ -109,6 +111,7 @@ export interface paths {
                 };
                 401: components["responses"]["UnauthorizedEither"];
                 404: components["responses"]["NotFound"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         /**
@@ -144,6 +147,7 @@ export interface paths {
                 403: components["responses"]["Forbidden"];
                 404: components["responses"]["NotFound"];
                 413: components["responses"]["PayloadTooLarge"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         post?: never;
@@ -190,6 +194,7 @@ export interface paths {
                 400: components["responses"]["BadRequest"];
                 401: components["responses"]["LoginRequired"];
                 404: components["responses"]["NotFound"];
+                429: components["responses"]["TooManyRequests"];
                 502: components["responses"]["BadGateway"];
             };
         };
@@ -244,6 +249,7 @@ export interface paths {
                 404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
                 413: components["responses"]["PayloadTooLarge"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         delete?: never;
@@ -283,6 +289,7 @@ export interface paths {
                 400: components["responses"]["BadRequest"];
                 401: components["responses"]["UnauthorizedEither"];
                 404: components["responses"]["NotFound"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         put?: never;
@@ -324,6 +331,7 @@ export interface paths {
                 };
                 401: components["responses"]["LoginRequired"];
                 403: components["responses"]["Forbidden"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         put?: never;
@@ -360,6 +368,7 @@ export interface paths {
                 404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
                 413: components["responses"]["PayloadTooLarge"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         delete?: never;
@@ -398,6 +407,7 @@ export interface paths {
                 };
                 401: components["responses"]["Unauthorized"];
                 404: components["responses"]["NotFound"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         /**
@@ -433,6 +443,7 @@ export interface paths {
                 404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
                 413: components["responses"]["PayloadTooLarge"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         post?: never;
@@ -458,6 +469,7 @@ export interface paths {
                 401: components["responses"]["Unauthorized"];
                 404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         options?: never;
@@ -496,6 +508,7 @@ export interface paths {
                 404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
                 413: components["responses"]["PayloadTooLarge"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         trace?: never;
@@ -539,6 +552,7 @@ export interface paths {
                 403: components["responses"]["Forbidden"];
                 409: components["responses"]["Conflict"];
                 413: components["responses"]["PayloadTooLarge"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         delete?: never;
@@ -582,6 +596,7 @@ export interface paths {
                 400: components["responses"]["BadRequest"];
                 401: components["responses"]["InvalidLogin"];
                 413: components["responses"]["PayloadTooLarge"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         delete?: never;
@@ -617,6 +632,7 @@ export interface paths {
                     content?: never;
                 };
                 401: components["responses"]["LoginRequired"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         delete?: never;
@@ -652,6 +668,7 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["LoginRequired"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         put?: never;
@@ -700,6 +717,7 @@ export interface paths {
                 404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
                 413: components["responses"]["PayloadTooLarge"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         delete?: never;
@@ -736,6 +754,7 @@ export interface paths {
                 };
                 401: components["responses"]["LoginRequired"];
                 403: components["responses"]["Forbidden"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         put?: never;
@@ -777,6 +796,7 @@ export interface paths {
                 };
                 401: components["responses"]["LoginRequired"];
                 403: components["responses"]["Forbidden"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         put?: never;
@@ -813,6 +833,7 @@ export interface paths {
                 403: components["responses"]["Forbidden"];
                 409: components["responses"]["Conflict"];
                 413: components["responses"]["PayloadTooLarge"];
+                429: components["responses"]["TooManyRequests"];
                 502: components["responses"]["BadGateway"];
             };
         };
@@ -854,6 +875,7 @@ export interface paths {
                     };
                 };
                 426: components["responses"]["UpgradeRequired"];
+                429: components["responses"]["TooManyRequests"];
             };
         };
         put?: never;
@@ -907,6 +929,7 @@ export interface paths {
                 404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
                 413: components["responses"]["PayloadTooLarge"];
+                429: components["responses"]["TooManyRequests"];
                 502: components["responses"]["BadGateway"];
             };
         };
@@ -938,6 +961,7 @@ export interface paths {
                 403: components["responses"]["Forbidden"];
                 404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
+                429: components["responses"]["TooManyRequests"];
                 502: components["responses"]["BadGateway"];
             };
         };
@@ -1399,6 +1423,22 @@ export interface components {
                 /**
                  * @example {
                  *       "message": "Course crs_999 not found"
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The caller has used its allowance for this minute (100 requests per partner key, 120 per network address for everyone else, 10 sign-in attempts per address). Nothing was changed; wait Retry-After seconds and try again. */
+        TooManyRequests: {
+            headers: {
+                /** @description Whole seconds until the caller's allowance starts again */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "message": "Too many requests. Try again in 42 seconds."
                  *     }
                  */
                 "application/json": components["schemas"]["Error"];

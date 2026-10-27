@@ -18,6 +18,12 @@ process.env.PARTNER_KEYS = [hashKey(PARTNER_KEY), hashKey(OTHER_PARTNER_KEY)].jo
 // fails under Jest with "Cannot add property experimental, object is not extensible".
 process.env.__NEXT_TEST_MODE = 'jest';
 
+// Rate limits are far above anything a test sends, so only the rate-limit tests ever meet one. They
+// lower the limit themselves, for as long as they need it.
+process.env.RATE_LIMIT_PARTNER = '1000000';
+process.env.RATE_LIMIT_ANON = '1000000';
+process.env.RATE_LIMIT_LOGIN = '1000000';
+
 export type TestServer = { server: Server; port: number; close: () => Promise<void> };
 
 /** Starts createServer() on a free local port. Call close() in afterAll. */

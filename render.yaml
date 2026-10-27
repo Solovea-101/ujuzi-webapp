@@ -20,6 +20,8 @@ services:
         generateValue: true
       - key: PARTNER_KEYS
         sync: false # SHA-256 hashes of the keys issued to Sherehe: `npm run key:issue -- sherehe`
+      - key: TRUST_PROXY
+        value: "true" # Render's proxy appends the caller's address to X-Forwarded-For; the rate limiter reads it
       - key: KAZI_API_URL
         value: https://kaziconnect1-1xmu.onrender.com
       - key: KAZI_WS_URL

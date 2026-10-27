@@ -16,11 +16,12 @@
  *   that was never issued; a seeded person ('achieng', 'mwanaisha' are graduates, 'westlands',
  *   'hurlingham', 'ruaka' staff at those centres) logs in as them; 'logoutSession' is a login of its own,
  *   so the case that logs it out does not break the others; { bearer: 'name' } sends a token that an
- *   earlier case captured.
+ *   earlier case captured. 'rateKey' is a second partner key with an allowance of its own, for the
+ *   rate-limit cases.
  */
 export type Auth =
   | 'partner' | 'none' | 'wrongKey' | 'badToken'
-  | 'achieng' | 'mwanaisha' | 'westlands' | 'hurlingham' | 'ruaka' | 'logoutSession'
+  | 'achieng' | 'mwanaisha' | 'westlands' | 'hurlingham' | 'ruaka' | 'logoutSession' | 'rateKey'
   | { bearer: string };
 
 export interface VerifyCase {
@@ -42,6 +43,10 @@ export interface VerifyCase {
   fields?: Record<string, unknown>;
   /** The answer is a list, and one item of it has these fields. */
   includes?: Record<string, unknown>;
+  /** Forget every rate-limit counter before this request, so the case starts from an empty minute. */
+  resetRateLimits?: boolean;
+  /** Environment settings applied just before this request (the rate-limit cases lower and restore the limits). */
+  setEnv?: Record<string, string>;
   /** Kazi Connect is stopped for this one request (containment: our own 502, nothing changed). */
   kaziDown?: boolean;
   /** Response headers that must match. */
@@ -341,4 +346,16 @@ export const CASES: readonly VerifyCase[] = [
   { operation: 'DELETE /api/me/applications/{id}', name: 'no token: 401', request: '/api/me/applications/app_1005', status: 401, as: 'none' },
 
   { operation: 'GET /api/me/applications/feed', name: 'plain HTTP: 426, it is a WebSocket', request: '/api/me/applications/feed', status: 426, as: 'none' },
+
+  // ---- Rate limiting. A second key has its own allowance; the limit is lowered to 3 for these cases only.
+  { operation: 'GET /api/courses', name: 'rate limit 3 a minute: 1st request is 200', request: '/api/courses', status: 200, as: 'rateKey', setEnv: { RATE_LIMIT_PARTNER: '3' } },
+  { operation: 'GET /api/courses', name: 'rate limit: 2nd request is 200', request: '/api/courses', status: 200, as: 'rateKey' },
+  { operation: 'GET /api/courses', name: 'rate limit: 3rd request is 200', request: '/api/courses', status: 200, as: 'rateKey' },
+  { operation: 'GET /api/courses', name: 'rate limit: 4th request is 429 with Retry-After', request: '/api/courses', status: 429, as: 'rateKey', headers: { 'retry-after': /^[1-9]\d*$/ } },
+  { operation: POST, name: 'rate limit: refused before it is validated or created: 429, nothing created', request: '/api/bookings', status: 429, as: 'rateKey', body: booking, noNewBooking: true },
+  { operation: 'GET /api/courses', name: 'the key used above is the only one limited: the main key still gets 200', request: '/api/courses', status: 200, setEnv: { RATE_LIMIT_PARTNER: '100000' } },
+  { operation: 'POST /api/auth/login', name: 'sign-in limit 2 a minute: 1st wrong password is 401', request: '/api/auth/login', status: 401, as: 'none', body: { email: 'achieng.otieno@example.com', password: 'wrong-1' }, resetRateLimits: true, setEnv: { RATE_LIMIT_LOGIN: '2' } },
+  { operation: 'POST /api/auth/login', name: 'sign-in limit: 2nd wrong password is 401', request: '/api/auth/login', status: 401, as: 'none', body: { email: 'achieng.otieno@example.com', password: 'wrong-2' } },
+  { operation: 'POST /api/auth/login', name: 'sign-in limit: the 3rd attempt is 429, even with the right password', request: '/api/auth/login', status: 429, as: 'none', body: { email: 'achieng.otieno@example.com', password: 'ujuzi-demo-pass' }, headers: { 'retry-after': /^[1-9]\d*$/ } },
+  { operation: 'GET /api/me', name: 'restored: the limits are back to normal', request: '/api/me', status: 200, setEnv: { RATE_LIMIT_LOGIN: '100000' } },
 ];

@@ -1,0 +1,42 @@
+# Week 9 evidence: terminal output from two real runs of the server on 2026-10-27 21:04. The key is shown as <your-api-key>.
+
+############ Run 1: the real settings (100 requests a minute per key) ############
+# Server start-up log (only a count of keys is printed, never a key):
+#   Partner keys loaded: 1
+#   Ujuzi listening on http://localhost:4906 (production)
+
+## Part B: the three key requests
+$ curl -i http://localhost:4906/api/courses          # expect 401
+HTTP/1.1 401 Unauthorized
+{"message":"Send your partner key as X-API-Key, or log in and send Authorization: Bearer YOUR_TOKEN"}
+
+$ curl -i -H "X-API-Key: wrong" http://localhost:4906/api/courses          # expect 401
+HTTP/1.1 401 Unauthorized
+{"message":"Send your partner key as X-API-Key, or log in and send Authorization: Bearer YOUR_TOKEN"}
+
+$ curl -i -H "X-API-Key: <your-api-key>" http://localhost:4906/api/courses          # expect 200
+HTTP/1.1 200 OK
+
+$ curl -i -X POST http://localhost:4906/api/bookings -d "{}"          # every partner endpoint is closed, not only the GETs: expect 401
+HTTP/1.1 401 Unauthorized
+{"message":"Send your partner key as X-API-Key"}
+
+############ Run 2: a fresh server with the limit lowered to 3, for this demonstration only ############
+# Server start-up log:
+#   Partner keys loaded: 1
+#   Ujuzi listening on http://localhost:4906 (production)
+
+## Part C: the rate limit
+$ for i in 1 2 3 4 5; do curl -s -o /dev/null -w "%{http_code} " -H "X-API-Key: <your-api-key>" http://localhost:4906/api/courses; done
+200 200 200 429 429 
+
+## The 429 response carries a Retry-After header and a JSON body
+$ curl -i -H "X-API-Key: <your-api-key>" http://localhost:4906/api/courses
+HTTP/1.1 429 Too Many Requests
+content-type: application/json
+retry-after: 60
+{"message":"Too many requests. Try again in 60 seconds."}
+
+## A wrong key is not affected by this key's allowance (it counts against the caller's address instead)
+$ curl -s -o /dev/null -w "%{http_code}" -H "X-API-Key: some-other-key" http://localhost:4906/api/courses
+401
