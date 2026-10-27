@@ -304,6 +304,21 @@ function storeContract(name: string, fresh: () => Promise<Store>) {
     });
 
     describe('kazi applications', () => {
+      it('changes an application only if it still has the status the caller read (an atomic compare-and-set)', async () => {
+        const store = await fresh();
+        const grad = await store.createUser(graduate());
+        await store.createKaziApplication({
+          application_id: 'app_2000', graduate_id: grad.id, job_id: 'job_1', preferred_date: FUTURE, note: '', status: 'pending',
+        });
+        const results = await Promise.all(
+          (['accepted', 'filled', 'cancelled'] as const).map((status) => store.updateKaziApplication('app_2000', { status }, 'pending')),
+        );
+        expect(results.filter((row) => row !== undefined)).toHaveLength(1);
+        expect(await store.updateKaziApplication('app_2000', { status: 'cancelled' }, 'pending')).toBeUndefined();
+        expect(await store.updateKaziApplication('app_9999', { status: 'accepted' }, 'pending')).toBeUndefined();
+        expect((await store.updateKaziApplication('app_2000', { note: 'no condition' }))?.note).toBe('no condition');
+      });
+
       it('are saved by Kazi id, listed per graduate and followed while pending', async () => {
         const store = await fresh();
         const grad = await store.createUser(graduate());

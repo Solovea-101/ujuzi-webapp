@@ -17,6 +17,7 @@ import {
   type IdKind,
   type KaziApplicationChange,
   type KaziApplicationRow,
+  type KaziApplicationStatus,
   type NewBooking,
   type NewCentre,
   type NewCertificate,
@@ -357,14 +358,18 @@ export class PgStore implements Store {
     );
   }
 
-  updateKaziApplication(applicationId: string, change: KaziApplicationChange): Promise<KaziApplicationRow | undefined> {
+  updateKaziApplication(
+    applicationId: string,
+    change: KaziApplicationChange,
+    onlyIfStatus?: KaziApplicationStatus,
+  ): Promise<KaziApplicationRow | undefined> {
     // A field left out of `change` keeps its stored value (COALESCE over a NULL parameter).
     return this.one<KaziApplicationRow>(
       `UPDATE kazi_applications
        SET preferred_date = COALESCE($2, preferred_date), note = COALESCE($3, note),
            status = COALESCE($4, status), updated_at = now()
-       WHERE application_id = $1 RETURNING *`,
-      [applicationId, change.preferred_date ?? null, change.note ?? null, change.status ?? null],
+       WHERE application_id = $1 AND ($5::text IS NULL OR status = $5) RETURNING *`,
+      [applicationId, change.preferred_date ?? null, change.note ?? null, change.status ?? null, onlyIfStatus ?? null],
     );
   }
 

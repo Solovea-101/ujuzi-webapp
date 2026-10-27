@@ -251,6 +251,15 @@ export interface Store {
   listKaziApplications(graduateId: string): Promise<KaziApplicationRow[]>;
   /** Every pending application of every graduate: the subscriber reopens these on start. */
   listPendingKaziApplications(): Promise<KaziApplicationRow[]>;
-  updateKaziApplication(applicationId: string, change: KaziApplicationChange): Promise<KaziApplicationRow | undefined>;
+  /**
+   * Changes an application. With onlyIfStatus the change is made only if the application still has that
+   * status, in one atomic step: of several callers who all read "pending", exactly one gets the row back and
+   * the rest get undefined. Without it, undefined means no such application.
+   */
+  updateKaziApplication(
+    applicationId: string,
+    change: KaziApplicationChange,
+    onlyIfStatus?: KaziApplicationStatus,
+  ): Promise<KaziApplicationRow | undefined>;
   deleteKaziApplication(applicationId: string): Promise<boolean>;
 }

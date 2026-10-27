@@ -13,7 +13,7 @@ Entries are copied from real runs only: the command, the status and body as rece
 |---|---|---|---|
 | Kazi Connect | Live `openapi.yaml` `info.version` moves from 1.2.1 (1.3.0 adds endpoints 22-25 only), and endpoints 1-9 answer as the contract says | 1.2.1, identical to `partner-tests/kazi_openapi.yaml` | Still 1.2.1 when last checked, 2026-10-20. `GET /api/jobs?status=active` answered 200 with 9 jobs, after a 23 s wake-up. |
 | Sherehe | Sherehe's live URL is known and it has handed us its contract | TODO: URL from the humans | TODO |
-| Ujuzi | Our own endpoints exist, so partners can call them | Phase 0 only: no partner endpoints yet | All 24 operations of the 0.2.0 contract are built and verified (164 cases, strict), including reading Kazi Connect (job matches, applications, live status). Tested against a local fake Kazi; a check against the real local Kazi on 4002 is recorded below when run. See VERIFICATION.md. |
+| Ujuzi | Our own endpoints exist, so partners can call them | Phase 0 only: no partner endpoints yet | All 24 operations of the 0.2.0 contract are built and verified (164 cases, strict), including reading Kazi Connect (job matches, applications, live status). Tested against a local fake Kazi, and checked live against the real local Kazi (contract 1.3.0) on 2026-10-27: `npm run ring:check` passes and so do the 38 partner tests. See VERIFICATION.md. |
 
 ## Entries
 
@@ -27,3 +27,12 @@ Format for each entry:
 - Status: paused / re-run on DATE: still failing (genuine) / re-run on DATE: passes (was a missing component)
 
 No entries yet: nothing seen so far has been caused by a missing partner part.
+
+## Not errors, but known gaps and decisions waiting for the team
+
+- **Not yet run against the live Render URLs** (none are deployed): the partner tests and `npm run ring:check`. Run them with `KAZI_URL=<live Kazi>` and `UJUZI_API_URL`/`UJUZI_API_KEY` once deployed.
+- **Not covered by the partner tests** because they need an employer login at Kazi: accepting an application, and the 409 for changing or withdrawing one that is no longer pending. Ujuzi handles both (the fake Kazi in `__tests__/helpers/kaziStub.ts` tests it), but it has not been seen against the real Kazi.
+- **`partner-tests/kazi_openapi.yaml` is still Kazi 1.2.1.** Kazi's contract on disk is 1.3.0; for endpoints 1 to 9 the only differences are wording ("SettleIn" became "Ujuzi"). Refreshing the frozen copy is the team's decision.
+- **Login has no rate limit or lockout, and there is no password reset.** Anyone who can reach a deployment can guess passwords at full speed.
+- **Seeded demo accounts share one public password** (`ujuzi-demo-pass`). Set `SEED_PASSWORD` on any deployment other people can reach, or do not seed it.
+- **Homebrew's `node` was broken on this machine** by a `brew upgrade` (it looks for `libsimdutf.36.dylib`). The agents work around it per command; the lasting fix, `brew reinstall node`, is yours to run.

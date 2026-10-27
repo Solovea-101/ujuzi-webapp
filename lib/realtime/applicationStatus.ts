@@ -12,7 +12,9 @@ import { pushToGraduate } from './graduateFeed';
 export async function recordStatus(store: Store, applicationId: string, status: KaziStatus): Promise<boolean> {
   const row = await store.getKaziApplication(applicationId);
   if (!row || row.status === status || KAZI_TERMINAL.includes(row.status)) return false;
-  const updated = await store.updateKaziApplication(applicationId, { status });
+  // "Only if it is still what I read": when the route and the subscriber report the same status at the
+  // same moment, exactly one of them gets the row back and announces it.
+  const updated = await store.updateKaziApplication(applicationId, { status }, row.status);
   if (!updated) return false;
   pushToGraduate(row.graduate_id, { applicationId, status, updatedAt: isoSeconds(updated.updated_at) });
   return true;
