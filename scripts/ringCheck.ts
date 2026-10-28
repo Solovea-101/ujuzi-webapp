@@ -21,6 +21,8 @@ import { schemaProblems } from './kaziSchema';
 type KaziJob = components['schemas']['Job'];
 
 const KAZI = (process.env.KAZI_API_URL ?? 'http://localhost:4002').replace(/\/+$/, '');
+// Set when Kazi Connect has API keys switched on; sent only to Kazi, never to Ujuzi.
+const KAZI_KEY: Record<string, string> = process.env.KAZI_API_KEY ? { 'X-API-Key': process.env.KAZI_API_KEY } : {};
 const KAZI_WS = (process.env.KAZI_WS_URL ?? KAZI.replace(/^http/, 'ws')).replace(/\/+$/, '');
 const UJUZI = (process.env.UJUZI_API_URL ?? process.env.UJUZI_URL ?? 'http://localhost:4003').replace(/\/+$/, '');
 const KEY = process.env.UJUZI_API_KEY ?? '';
@@ -44,7 +46,7 @@ interface Answer {
 async function call(base: string, method: string, path: string, headers: Record<string, string> = {}, body?: unknown): Promise<Answer> {
   const res = await fetch(base + path, {
     method,
-    headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers },
+    headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(base === KAZI ? KAZI_KEY : {}), ...headers },
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(90_000), // a sleeping Render server can take a minute
   });
@@ -82,7 +84,7 @@ async function checkKazi(): Promise<KaziJob | undefined> {
     applicationId = isObject(created.body) ? String(created.body.applicationId) : undefined;
     check('POST /api/applications creates a pending application', created.status === 201 && schemaProblems('Application', created.body).length === 0, `${applicationId}`);
     if (applicationId) {
-      const ws = new WebSocket(`${KAZI_WS}/api/applications/${applicationId}/subscribe`);
+      const ws = new WebSocket(`${KAZI_WS}/api/applications/${applicationId}/subscribe`, { headers: KAZI_KEY });
       const first = await new Promise<unknown>((resolve, reject) => {
         ws.once('message', (data) => resolve(JSON.parse(data.toString())));
         ws.once('error', reject);

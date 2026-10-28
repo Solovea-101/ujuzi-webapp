@@ -29,6 +29,8 @@ services:
         value: https://kaziconnect1-1xmu.onrender.com
       - key: KAZI_WS_URL
         value: wss://kaziconnect1-1xmu.onrender.com
+      - key: KAZI_API_KEY
+        sync: false # only when Kazi Connect has API keys switched on: the key Kazi issued to Ujuzi
       - key: STAFF_INVITE_CODE
         sync: false # leave unset to keep staff sign-up closed
       - key: SEED_ON_START

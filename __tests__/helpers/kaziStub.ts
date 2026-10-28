@@ -57,6 +57,10 @@ export class KaziStub {
   private wss = new WebSocketServer({ noServer: true });
   private subscribers = new Map<string, Set<WebSocket>>();
   private hanging = false;
+  private requiredKey: string | undefined;
+  private limitSeconds = 0;
+  /** The X-API-Key of every request and upgrade received (undefined when none was sent), in order. */
+  keysSeen: Array<string | undefined> = [];
   private delayMs = 0;
   private nextId = 1005;
   private port = 0;
@@ -136,7 +140,20 @@ export class KaziStub {
     this.nextId = 1005;
     this.delayMs = 0;
     this.hanging = false;
+    this.requiredKey = undefined;
+    this.limitSeconds = 0;
+    this.keysSeen.length = 0;
     this.jobs = jobs.map((job) => ({ ...job, payRange: { ...job.payRange } }));
+  }
+
+  /** Kazi with keys switched on: without this key every call and upgrade is a 401 { message }. Undefined switches it off. */
+  requireKey(key: string | undefined): void {
+    this.requiredKey = key;
+  }
+
+  /** Every call and upgrade is a 429 with Retry-After: <seconds> until switched off with 0. */
+  rateLimit(seconds: number): void {
+    this.limitSeconds = seconds;
   }
 
   /** While hanging, HTTP requests are accepted and never answered, like a Kazi that is still waking up. */
@@ -163,6 +180,13 @@ export class KaziStub {
       socket.on('close', () => this.sockets.delete(socket));
     });
     server.on('upgrade', (req, socket, head) => {
+      const refusal = this.refusal(req);
+      if (refusal) {
+        const retry = refusal.status === 429 ? `Retry-After: ${this.limitSeconds}\r\n` : '';
+        socket.write(`HTTP/1.1 ${refusal.status} Refused\r\n${retry}Content-Length: 0\r\nConnection: close\r\n\r\n`);
+        socket.destroy();
+        return;
+      }
       const id = /^\/api\/applications\/([^/]+)\/subscribe$/.exec(new URL(req.url ?? '/', 'http://x').pathname)?.[1];
       if (!id || !this.applications.has(id)) {
         socket.write('HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n');
@@ -200,12 +224,26 @@ export class KaziStub {
     return Buffer.concat(chunks).toString('utf8');
   }
 
+  /** Kazi's own 401 and 429 (both with a JSON body, unlike its empty 400 and 404), or undefined to carry on. */
+  private refusal(req: IncomingMessage): { status: 401 | 429 } | undefined {
+    const sent = req.headers['x-api-key'];
+    this.keysSeen.push(typeof sent === 'string' ? sent : undefined);
+    if (this.requiredKey !== undefined && sent !== this.requiredKey) return { status: 401 };
+    if (this.limitSeconds > 0) return { status: 429 };
+    return undefined;
+  }
+
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://x');
     const method = req.method ?? 'GET';
     this.requests.push(`${method} ${url.pathname}${url.search}`);
     if (this.hanging) return; // never answer
     if (this.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.delayMs));
+    const refusal = this.refusal(req);
+    if (refusal?.status === 401) return this.send(res, 401, { message: 'Missing or invalid API key' });
+    if (refusal?.status === 429) {
+      return this.send(res, 429, { message: 'Too many requests', retryAfter: this.limitSeconds }, { 'Retry-After': String(this.limitSeconds) });
+    }
 
     const path = url.pathname;
     const jobMatch = /^\/api\/jobs\/([^/]+)(\/status)?$/.exec(path);

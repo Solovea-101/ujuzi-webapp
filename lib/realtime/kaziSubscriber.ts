@@ -1,4 +1,5 @@
 import { WebSocket } from 'ws';
+import { isKaziRateLimited, kaziKeyHeaders, noteKeyRefused, retryAfterMs } from '@/lib/clients/fetcher';
 import { getApplicationStatus, KAZI_TERMINAL, parseStatusMessage, subscribeUrl, type KaziStatus } from '@/lib/clients/kaziClient';
 import { getStore } from '@/lib/db';
 import type { KaziApplicationRow } from '@/lib/db/types';
@@ -26,6 +27,8 @@ interface Watcher {
   reconnect?: NodeJS.Timeout;
   poll: NodeJS.Timeout;
   connected: boolean;
+  /** Kazi asked us to wait (429): no new connection or poll before this time (ms since the epoch). */
+  pauseUntil?: number;
 }
 
 /**
@@ -88,7 +91,7 @@ export class KaziSubscriber implements Realtime {
     if (this.watchers.get(watcher.applicationId) !== watcher) return;
     let socket: WebSocket;
     try {
-      socket = new WebSocket(subscribeUrl(watcher.applicationId));
+      socket = new WebSocket(subscribeUrl(watcher.applicationId), { headers: kaziKeyHeaders() });
     } catch {
       this.scheduleReconnect(watcher);
       return;
@@ -104,7 +107,20 @@ export class KaziSubscriber implements Realtime {
       if (message && message.applicationId === watcher.applicationId) void this.learn(watcher.applicationId, message.status);
     });
     // Kazi refuses the upgrade (404) for an application it does not know: ask by HTTP what became of it.
-    socket.on('unexpected-response', () => void this.pollOnce(watcher.applicationId));
+    // Kazi may also refuse our key (401) or ask us to wait (429): neither is retried in a tight loop.
+    socket.on('unexpected-response', (_req, res) => {
+      if (res.statusCode === 401) {
+        noteKeyRefused();
+        watcher.pauseUntil = Date.now() + backoffMaxMs();
+      } else if (res.statusCode === 429) {
+        watcher.pauseUntil = Date.now() + retryAfterMs(String(res.headers['retry-after'] ?? ''));
+      } else {
+        void this.pollOnce(watcher.applicationId);
+        return;
+      }
+      res.resume();
+      socket.terminate(); // 'close' follows, and the reconnect waits for pauseUntil
+    });
     socket.on('error', () => undefined); // 'close' follows and handles it
     socket.on('close', () => {
       watcher.connected = false;
@@ -114,7 +130,7 @@ export class KaziSubscriber implements Realtime {
 
   private scheduleReconnect(watcher: Watcher): void {
     if (this.watchers.get(watcher.applicationId) !== watcher || watcher.reconnect) return;
-    const delay = backoffDelay(watcher.attempt);
+    const delay = Math.max(backoffDelay(watcher.attempt), (watcher.pauseUntil ?? 0) - Date.now());
     watcher.attempt += 1;
     watcher.reconnect = setTimeout(() => {
       watcher.reconnect = undefined;
@@ -124,12 +140,14 @@ export class KaziSubscriber implements Realtime {
 
   /** The fallback: ask Kazi. A 404 means the application was withdrawn there. Kazi being down is ignored. */
   private async pollOnce(applicationId: string): Promise<void> {
-    if (!this.watchers.has(applicationId)) return;
+    const watcher = this.watchers.get(applicationId);
+    if (!watcher || (watcher.pauseUntil ?? 0) > Date.now()) return;
     try {
       const status = await getApplicationStatus(applicationId);
       await this.learn(applicationId, status === 'gone' ? 'cancelled' : status);
-    } catch {
-      // Kazi cannot be reached right now; the next poll or reconnect tries again.
+    } catch (err) {
+      // Kazi cannot be reached right now, or asked us to wait; the next poll or reconnect tries again.
+      if (isKaziRateLimited(err)) watcher.pauseUntil = Date.now() + err.retryAfterMs;
     }
   }
 
