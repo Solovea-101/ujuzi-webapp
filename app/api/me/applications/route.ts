@@ -45,7 +45,9 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       const answer = respondToKazi(err, {
         400: 'Kazi Connect did not accept this application: check that the job exists and the date is in the future',
-        409: `Job ${jobId} is closed and is not accepting applications`,
+        // Kazi sends 409 for a closed job and, since its "a job has one place" change, for a job that is already filled.
+        // The two are not told apart by reading Kazi's wording; one message is true for both.
+        409: `Job ${jobId} is no longer taking applications: it is closed or has already been filled`,
       });
       if (answer) return answer;
       throw err;

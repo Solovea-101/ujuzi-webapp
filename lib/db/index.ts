@@ -23,7 +23,12 @@ export function getStore(): Promise<Store> {
 
 async function createStore(): Promise<Store> {
   const connectionString = process.env.DATABASE_URL;
-  if (connectionString) return new PgStore(new Pool({ connectionString }));
+  if (connectionString) {
+    const pool = new Pool({ connectionString });
+    // A hosted database drops idle connections now and then; without a listener that error would end the process.
+    pool.on('error', (err) => console.error('PostgreSQL connection error (the pool reconnects on the next query):', err.message));
+    return new PgStore(pool);
+  }
   const store = new MemoryStore();
   await seedStore(store);
   return store;

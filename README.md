@@ -194,7 +194,7 @@ Every failure answers with one field, `message`, in plain English, and nothing i
 | 401 | No valid key or token | Missing `X-API-Key`, a wrong key, or an expired login |
 | 403 | Not allowed | Staff deciding another centre's booking; a graduate calling a staff endpoint; staff sign-up when no invite code is set; a wrong current password when changing it |
 | 404 | No such id | A mistyped id, a cancelled booking, someone else's application |
-| 409 | Not allowed in the current state | Changing or cancelling a confirmed booking; a second pending booking for the same event; enrolling twice |
+| 409 | Not allowed in the current state | Changing or cancelling a confirmed booking; a second pending booking for the same event; enrolling twice; applying for a Kazi job that is closed or already filled |
 | 405 | The URL does not accept that method | `PUT /api/courses` |
 | 413 | Body too large | More than 20 KB of JSON |
 | 429 | Too many requests | Over the rate limit above, or an email locked after five wrong passwords; read `Retry-After` and wait |

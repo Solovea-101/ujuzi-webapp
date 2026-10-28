@@ -305,6 +305,10 @@ export class KaziStub {
     const job = this.jobs.find((j) => j.id === record.jobId);
     if (!job) return this.send(res, 400, { message: `Job ${record.jobId} does not exist` });
     if (job.status !== 'active') return this.send(res, 409, { message: `Job ${job.id} is closed and is not accepting applications` });
+    // As Kazi now does: a job has one place, so an open job that already has an accepted applicant is filled.
+    if ([...this.applications.values()].some((a) => a.jobId === job.id && a.status === 'accepted')) {
+      return this.send(res, 409, { message: `Job ${job.id} has already been filled` });
+    }
 
     const application: StubApplication = {
       applicationId: `app_${this.nextId++}`,
