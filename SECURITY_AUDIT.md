@@ -81,6 +81,7 @@ Tried to set fields the caller must not control: `status` and `id` on a booking,
 - **README, `openapi.yaml`, `evidence/week09/`:** show `<your-api-key>` or `YOUR_KEY`; the evidence file was checked for the real key's text and has none.
 - **Server log:** prints only a count (`Partner keys loaded: 1`); the run's log contained neither the key nor an `Authorization` header.
 - **In a URL:** the key is read only from the `X-API-Key` header; a key in a query string is ignored (it would be kept in server and proxy logs). Rate-limit buckets use a shortened hash of the key, never the key.
+- **Kazi's key (new, 2026-10-28):** when Kazi Connect switches API keys on, Ujuzi sends `KAZI_API_KEY` as `X-API-Key` on every call and on its WebSocket. It is read from the environment only (`render.yaml`: `sync: false`), is never printed (a test checks the logs), and a 401 from Kazi is logged once a minute as a key problem and answered with our own 502, never retried in a loop; a 429 is waited out using `Retry-After`. With no key set nothing is sent.
 - **Not checked:** Render's own settings and logs (nothing is deployed); the other teams' repositories (not ours to read).
 
 ## Tests added or extended this week

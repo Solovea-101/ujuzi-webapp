@@ -12,6 +12,8 @@ import { schemaProblems } from '../scripts/kaziSchema';
  */
 const BASE = (process.env.KAZI_URL ?? process.env.KAZI_API_URL ?? 'https://kaziconnect1-1xmu.onrender.com').replace(/\/+$/, '');
 const WS_BASE = BASE.replace(/^http/, 'ws');
+// Only needed when Kazi Connect has API keys switched on (KAZI_API_KEY); the contract's ApiKey scheme is X-API-Key.
+const KEY_HEADER: Record<string, string> = process.env.KAZI_API_KEY ? { 'X-API-Key': process.env.KAZI_API_KEY } : {};
 const STUDENT = 'grd_partner_test'; // fictional: a Ujuzi-style id, never real data
 
 jest.setTimeout(90_000); // the first call to a sleeping Render server can take a minute
@@ -29,7 +31,7 @@ interface Answer {
 async function call(method: string, path: string, body?: unknown, raw?: string): Promise<Answer> {
   const res = await fetch(BASE + path, {
     method,
-    headers: body !== undefined || raw !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    headers: { ...(body !== undefined || raw !== undefined ? { 'Content-Type': 'application/json' } : {}), ...KEY_HEADER },
     body: raw ?? (body !== undefined ? JSON.stringify(body) : undefined),
   });
   const text = await res.text();
@@ -267,7 +269,7 @@ describe('Endpoint 9: DELETE /api/applications/{id}', () => {
 });
 
 describe('Endpoint 6: the WebSocket /api/applications/{id}/subscribe', () => {
-  const connect = (id: string) => new WebSocket(`${WS_BASE}/api/applications/${id}/subscribe`);
+  const connect = (id: string) => new WebSocket(`${WS_BASE}/api/applications/${id}/subscribe`, { headers: KEY_HEADER });
 
   it('sends the current status once on connect', async () => {
     const app = (await newApplication(activeJob.id)).body as { applicationId: string };
