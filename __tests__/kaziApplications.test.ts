@@ -156,7 +156,18 @@ describe('POST /api/me/applications', () => {
   it('answers 409 for a closed job, with our own words, and saves nothing', async () => {
     const res = await (await graduate()).post('/api/me/applications').send(apply({ jobId: 'job_12349' }));
     expect(res.status).toBe(409);
-    expectErrorBody(res.body, 'Job job_12349 is closed and is not accepting applications');
+    expectErrorBody(res.body, 'Job job_12349 is no longer taking applications: it is closed or has already been filled');
+    expect((await (await graduate()).get('/api/me/applications')).body).toEqual([]);
+  });
+
+  it('answers 409, not 502, for an open job that already has an accepted applicant, and saves nothing', async () => {
+    const first = await (await graduate(SEEDED.brian)).post('/api/me/applications').send(apply({ jobId: 'job_12345' }));
+    expect(first.status).toBe(201);
+    kazi.stub.accept(first.body.applicationId);
+    const res = await (await graduate()).post('/api/me/applications').send(apply({ jobId: 'job_12345' }));
+    expect(res.status).toBe(409);
+    expectErrorBody(res.body, 'Job job_12345 is no longer taking applications: it is closed or has already been filled');
+    expect(JSON.stringify(res.body)).not.toContain('Kazi'); // Kazi's own words are not passed through
     expect((await (await graduate()).get('/api/me/applications')).body).toEqual([]);
   });
 

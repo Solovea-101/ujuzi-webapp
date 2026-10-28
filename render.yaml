@@ -6,7 +6,9 @@ services:
     runtime: node
     plan: free # sleeps after 15 idle minutes; the first request after that can take up to a minute
     branch: main
-    buildCommand: npm ci && npm run build
+    # --include=dev: `next build` needs typescript and tailwindcss, which are devDependencies, and Render may set
+    # NODE_ENV=production while installing, which would skip them.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /login
     envVars:
