@@ -60,11 +60,25 @@ async function call(base: string, method: string, path: string, headers: Record<
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/**
+ * Applies for the first job that still takes applications. A job has one place at Kazi: once an employer has
+ * accepted someone, applying for it is a 409, and earlier runs or other tests may have filled the first few.
+ */
+async function applyToFirstOpenJob(jobIds: string[], send: (jobId: string) => Promise<Answer>): Promise<Answer> {
+  let last: Answer = { status: 0, body: undefined };
+  for (const jobId of jobIds.slice(0, 20)) {
+    last = await send(jobId);
+    if (last.status !== 409) return last;
+  }
+  return last;
+}
+
 // ---- 1 and 2: Kazi Connect --------------------------------------------------------------------------
 
 async function checkKazi(): Promise<KaziJob | undefined> {
   console.log(`\nKazi Connect at ${KAZI}`);
   let first: KaziJob | undefined;
+  let jobsForApply: KaziJob[] = [];
   try {
     const jobs = await call(KAZI, 'GET', '/api/jobs?status=active');
     const list = Array.isArray(jobs.body) ? (jobs.body as KaziJob[]) : [];
@@ -72,6 +86,7 @@ async function checkKazi(): Promise<KaziJob | undefined> {
     const bad = list.flatMap((job) => schemaProblems('Job', job)).slice(0, 3);
     check('every job matches Kazi\'s contract (types/kazi.d.ts Job)', bad.length === 0, bad.join('; '));
     first = list[0];
+    jobsForApply = list;
   } catch (err) {
     report('FAIL', 'live read from Kazi', (err as Error).message);
     return undefined;
@@ -80,7 +95,10 @@ async function checkKazi(): Promise<KaziJob | undefined> {
 
   let applicationId: string | undefined;
   try {
-    const created = await call(KAZI, 'POST', '/api/applications', {}, { jobId: first.id, studentId: 'grd_ringcheck', preferredDate: future(30) });
+    const created = await applyToFirstOpenJob(
+      [first.id, ...(Array.isArray(jobsForApply) ? jobsForApply.map((job) => job.id) : [])],
+      (jobId) => call(KAZI, 'POST', '/api/applications', {}, { jobId, studentId: 'grd_ringcheck', preferredDate: future(30) }),
+    );
     applicationId = isObject(created.body) ? String(created.body.applicationId) : undefined;
     check('POST /api/applications creates a pending application', created.status === 201 && schemaProblems('Application', created.body).length === 0, `${applicationId}`);
     if (applicationId) {
@@ -153,7 +171,10 @@ async function checkUjuziToKazi(): Promise<void> {
     const jobs = Array.isArray(matches.body) ? (matches.body as Array<Record<string, unknown>>) : [];
     check('job matches come from Kazi through Ujuzi', matches.status === 200 && jobs.length > 0, matches.status === 502 ? 'Ujuzi answered 502: Kazi unreachable from Ujuzi' : `${jobs.length} matches`);
     if (!jobs[0]) return;
-    const applied = await call(UJUZI, 'POST', '/api/me/applications', headers, { jobId: jobs[0].jobId, preferredDate: future(30), note: 'ring:check (withdrawn again)' });
+    const applied = await applyToFirstOpenJob(
+      jobs.map((job) => String(job.jobId)),
+      (jobId) => call(UJUZI, 'POST', '/api/me/applications', headers, { jobId, preferredDate: future(30), note: 'ring:check (withdrawn again)' }),
+    );
     applicationId = isObject(applied.body) ? String(applied.body.applicationId) : undefined;
     check('applying through Ujuzi creates it at Kazi', applied.status === 201 && Boolean(applicationId), `${applicationId}`);
     if (applicationId) {
