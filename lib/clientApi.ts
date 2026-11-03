@@ -22,7 +22,8 @@ export function setToken(token: string | null): void {
   }
 }
 
-export type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; message: string };
+/** A failure carries the message the API sent. `retryAfter` (seconds) is set when the API sent a Retry-After header, as on a 429. */
+export type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; message: string; retryAfter?: number };
 
 /** One call to our API with the login token attached. Never throws: a failure is { ok: false, message }. */
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<ApiResult<T>> {
@@ -46,7 +47,8 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     }
     if (res.ok) return { ok: true, data: body as T };
     const message = typeof body === 'object' && body !== null && 'message' in body ? String((body as { message: unknown }).message) : `Something went wrong (${res.status})`;
-    return { ok: false, status: res.status, message };
+    const wait = Number(res.headers.get('retry-after'));
+    return { ok: false, status: res.status, message, ...(Number.isFinite(wait) && wait > 0 ? { retryAfter: Math.ceil(wait) } : {}) };
   } catch {
     return { ok: false, status: 0, message: 'Could not reach the server. Check your connection and try again.' };
   }
