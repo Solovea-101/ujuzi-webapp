@@ -1,75 +1,142 @@
 import type { ReactNode } from 'react';
 
-export function Page({ title, children, intro }: { title: string; intro?: string; children: ReactNode }) {
+/** The page frame: one h1, an optional plain-English intro, and the content. `wide` is for tables and workbenches. */
+export function Page({
+  title, children, intro, width = 'default',
+}: { title: string; intro?: string; children: ReactNode; width?: 'narrow' | 'default' | 'wide' }) {
+  const max = width === 'narrow' ? 'max-w-md' : width === 'wide' ? 'max-w-6xl' : 'max-w-5xl';
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-      <h1 className="text-3xl font-bold text-brand-700">{title}</h1>
-      {intro && <p className="mt-2 max-w-2xl text-ink/80">{intro}</p>}
+    <main id="main" className={`mx-auto w-full ${max} px-4 py-6 sm:px-6 lg:px-8 lg:py-10`}>
+      <h1 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">{title}</h1>
+      {intro && <p className="mt-2 max-w-2xl text-ink-secondary">{intro}</p>}
       <div className="mt-6">{children}</div>
     </main>
   );
 }
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-xl border border-brand-100 bg-white p-5 shadow-sm ${className}`}>{children}</section>;
+type CardVariant = 'default' | 'interactive' | 'ticket';
+
+/** A bordered sheet. `interactive` gets the hard-offset shadow of something you can press; `ticket` has no padding so halves can be stacked. */
+export function Card({ children, className = '', variant = 'default' }: { children: ReactNode; className?: string; variant?: CardVariant }) {
+  const base = 'rounded-md border border-line-strong bg-surface text-ink';
+  const kinds: Record<CardVariant, string> = {
+    default: 'p-4',
+    interactive: 'p-4 shadow-tactile-sm transition-transform motion-safe:hover:translate-x-px motion-safe:hover:translate-y-px motion-safe:hover:shadow-none',
+    ticket: 'overflow-hidden',
+  };
+  return <section className={`${base} ${kinds[variant]} ${className}`}>{children}</section>;
 }
 
-export function ErrorNote({ message }: { message?: string | null }) {
+export function ErrorNote({ message, id }: { message?: string | null; id?: string }) {
   if (!message) return null;
   return (
-    <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-      {message}
+    <p id={id} role="alert" className="flex gap-2 rounded-sm border border-bad-border bg-bad-bg px-3 py-2 text-sm text-bad-text">
+      <span aria-hidden="true" className="font-mono font-bold">!</span>
+      <span>{message}</span>
     </p>
   );
 }
 
 export function Notice({ children }: { children: ReactNode }) {
-  return <p className="rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-900">{children}</p>;
+  return (
+    <p role="status" className="flex gap-2 rounded-sm border border-ok-border bg-ok-bg px-3 py-2 text-sm text-ok-text">
+      <span aria-hidden="true" className="font-mono font-bold">✓</span>
+      <span>{children}</span>
+    </p>
+  );
 }
 
-const FIELD = 'mt-1 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-ink focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100';
+/** The class every text input, select and textarea uses. 44px tall so a thumb can hit it. */
+export const inputClass =
+  'mt-1 block min-h-11 w-full rounded-sm border border-line-strong bg-surface px-3 py-2 text-base text-ink placeholder:text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
 
 export function Field({ label, children, hint }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <label className="block text-sm font-medium text-ink">
+    <label className="block text-sm font-semibold text-ink">
       {label}
       {children}
-      {hint && <span className="mt-1 block text-xs font-normal text-ink/60">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs font-normal text-ink-muted">{hint}</span>}
     </label>
   );
 }
 
-export const inputClass = FIELD;
+type Tone = 'primary' | 'action' | 'plain' | 'danger';
+type Size = 'sm' | 'md' | 'lg';
+
+/** The class for anything that looks like a button, so a Link can wear it too. */
+export function buttonClass({ tone = 'primary', size = 'md', full = false }: { tone?: Tone; size?: Size; full?: boolean } = {}): string {
+  const tones: Record<Tone, string> = {
+    primary: 'border border-line-strong bg-brand text-on-brand shadow-tactile-sm hover:bg-brand-hover',
+    action: 'border border-line-strong bg-terracotta text-on-terracotta shadow-tactile-sm hover:bg-terracotta-hover',
+    plain: 'border border-line-strong bg-surface text-ink hover:bg-subtle',
+    danger: 'border border-bad-border bg-surface text-bad-text hover:bg-bad-bg',
+  };
+  const sizes: Record<Size, string> = {
+    sm: 'min-h-9 px-3 text-sm',
+    md: 'min-h-11 px-4 text-sm',
+    lg: 'min-h-12 px-5 text-base',
+  };
+  return [
+    'inline-flex items-center justify-center gap-2 rounded-sm font-semibold transition-transform',
+    'active:translate-y-px active:shadow-none disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none',
+    tones[tone], sizes[size], full ? 'w-full' : '',
+  ].join(' ');
+}
 
 export function Button({
-  children, onClick, type = 'button', disabled, tone = 'primary',
-}: { children: ReactNode; onClick?: () => void; type?: 'button' | 'submit'; disabled?: boolean; tone?: 'primary' | 'plain' | 'danger' }) {
-  const tones = {
-    primary: 'bg-brand-600 text-white hover:bg-brand-700',
-    plain: 'border border-ink/20 bg-white text-ink hover:bg-brand-50',
-    danger: 'border border-red-300 bg-white text-red-700 hover:bg-red-50',
-  };
+  children, onClick, type = 'button', disabled, tone = 'primary', size = 'md', loading = false, full = false,
+}: {
+  children: ReactNode; onClick?: () => void; type?: 'button' | 'submit'; disabled?: boolean;
+  tone?: Tone; size?: Size; loading?: boolean; full?: boolean;
+}) {
   return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      className={`rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${tones[tone]}`}
-    >
+    <button type={type} onClick={onClick} disabled={disabled || loading} aria-busy={loading || undefined} className={buttonClass({ tone, size, full })}>
+      {loading && <span aria-hidden="true" className="size-3 border-2 border-current border-t-transparent motion-safe:animate-spin" style={{ borderRadius: 2 }} />}
       {children}
     </button>
   );
 }
 
-const BADGES: Record<string, string> = {
-  pending: 'bg-amber-100 text-amber-900',
-  accepted: 'bg-brand-100 text-brand-900',
-  confirmed: 'bg-brand-100 text-brand-900',
-  filled: 'bg-ink/10 text-ink',
-  declined: 'bg-red-100 text-red-800',
-  cancelled: 'bg-ink/10 text-ink/70',
+type Look = 'ok' | 'warn' | 'bad' | 'info' | 'neutral' | 'urgent';
+
+const BADGES: Record<string, { label: string; look: Look; icon: string }> = {
+  pending: { label: 'Pending', look: 'warn', icon: '●' },
+  accepted: { label: 'Accepted', look: 'ok', icon: '✓' },
+  confirmed: { label: 'Confirmed', look: 'ok', icon: '✓' },
+  filled: { label: 'Filled', look: 'neutral', icon: '■' },
+  declined: { label: 'Declined', look: 'bad', icon: '✕' },
+  cancelled: { label: 'Cancelled', look: 'neutral', icon: '✕' },
+  urgent: { label: 'Urgent', look: 'urgent', icon: '!' },
+  live: { label: 'Live', look: 'ok', icon: '●' },
+  offline: { label: 'Offline', look: 'neutral', icon: '○' },
 };
 
+const LOOKS: Record<Look, string> = {
+  ok: 'border-ok-border bg-ok-bg text-ok-text',
+  warn: 'border-warn-border bg-warn-bg text-warn-text',
+  bad: 'border-bad-border bg-bad-bg text-bad-text',
+  info: 'border-info-border bg-info-bg text-info-text',
+  neutral: 'border-line-strong bg-subtle text-ink-secondary',
+  urgent: 'border-line-strong bg-terracotta text-on-terracotta',
+};
+
+/** Status as a word and a symbol, never colour alone. */
 export function StatusBadge({ status }: { status: string }) {
-  return <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${BADGES[status] ?? 'bg-ink/10'}`}>{status}</span>;
+  const badge = BADGES[status] ?? { label: status, look: 'neutral' as Look, icon: '●' };
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-xs border px-2 py-0.5 text-xs font-bold uppercase tracking-wide ${LOOKS[badge.look]}`}>
+      <span aria-hidden="true" className="font-mono">{badge.icon}</span>
+      {badge.label}
+    </span>
+  );
+}
+
+/** A label above a value, for the ledger rows of a course or booking. */
+export function Stat({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 p-3">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{label}</dt>
+      <dd className="mt-0.5 text-sm font-semibold text-ink">{children}</dd>
+    </div>
+  );
 }

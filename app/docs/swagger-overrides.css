@@ -1,0 +1,127 @@
+/* Makes Swagger UI use Ujuzi's fonts, colours and square corners, in both themes. Scoped to .swagger-ui so nothing else changes. */
+.swagger-ui,
+.swagger-ui .opblock-tag,
+.swagger-ui .opblock .opblock-summary-description,
+.swagger-ui .tab li,
+.swagger-ui table thead tr th,
+.swagger-ui .parameter__name,
+.swagger-ui .response-col_status,
+.swagger-ui .btn,
+.swagger-ui select,
+.swagger-ui input,
+.swagger-ui textarea {
+  font-family: var(--font-sans);
+}
+.swagger-ui .info .title,
+.swagger-ui .opblock-tag {
+  font-family: var(--font-display);
+  color: var(--text-primary);
+}
+.swagger-ui .opblock .opblock-summary-path,
+.swagger-ui .opblock .opblock-summary-path__deprecated,
+.swagger-ui code,
+.swagger-ui .parameter__type,
+.swagger-ui .response-col_links,
+.swagger-ui .model {
+  font-family: var(--font-mono);
+}
+.swagger-ui,
+.swagger-ui .info p,
+.swagger-ui .info li,
+.swagger-ui .info table,
+.swagger-ui .markdown p,
+.swagger-ui .markdown li,
+.swagger-ui .renderedMarkdown p,
+.swagger-ui .opblock-description-wrapper p,
+.swagger-ui .opblock-external-docs-wrapper p,
+.swagger-ui .opblock-title_normal p,
+.swagger-ui table thead tr td,
+.swagger-ui table thead tr th,
+.swagger-ui .parameter__name,
+.swagger-ui .parameter__type,
+.swagger-ui .response-col_status,
+.swagger-ui .response-col_description,
+.swagger-ui .tab li,
+.swagger-ui label,
+.swagger-ui .model-title,
+.swagger-ui .model,
+.swagger-ui section.models h4,
+.swagger-ui .opblock-summary-description,
+.swagger-ui .opblock .opblock-section-header h4,
+.swagger-ui .opblock .opblock-section-header label {
+  color: var(--text-primary);
+}
+.swagger-ui .info a,
+.swagger-ui a.nostyle,
+.swagger-ui .markdown a {
+  color: var(--brand-primary);
+}
+.swagger-ui .scheme-container {
+  background: var(--bg-surface);
+  box-shadow: none;
+  border: 1px solid var(--border-subtle);
+}
+.swagger-ui .opblock {
+  border-radius: 4px;
+  box-shadow: none;
+  border-width: 1.5px;
+}
+.swagger-ui .opblock .opblock-section-header {
+  background: var(--bg-subtle);
+  box-shadow: none;
+}
+.swagger-ui .opblock-body pre.microlight {
+  background: #141715 !important;
+  border-radius: 4px;
+}
+.swagger-ui .btn {
+  border-radius: 4px;
+  box-shadow: none;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.swagger-ui .btn.authorize {
+  color: var(--brand-primary);
+  border-color: var(--brand-primary);
+  background: transparent;
+}
+.swagger-ui .btn.authorize svg {
+  fill: var(--brand-primary);
+}
+.swagger-ui .btn.execute {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: var(--brand-on-primary);
+}
+.swagger-ui input[type="text"],
+.swagger-ui input[type="password"],
+.swagger-ui input[type="search"],
+.swagger-ui input[type="email"],
+.swagger-ui select,
+.swagger-ui textarea {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+}
+.swagger-ui section.models,
+.swagger-ui section.models .model-container {
+  background: var(--bg-surface);
+  border-color: var(--border-subtle);
+  border-radius: 4px;
+}
+.swagger-ui .dialog-ux .modal-ux {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 2px solid var(--border-strong);
+  border-radius: 6px;
+}
+.swagger-ui .dialog-ux .modal-ux-header h3,
+.swagger-ui .dialog-ux .modal-ux-content p {
+  color: var(--text-primary);
+}
+.swagger-ui .opblock.opblock-get { border-color: #1b5fb0; background: color-mix(in srgb, #1b5fb0 8%, transparent); }
+.swagger-ui .opblock.opblock-post { border-color: #1a7a47; background: color-mix(in srgb, #1a7a47 8%, transparent); }
+.swagger-ui .opblock.opblock-put { border-color: #a86400; background: color-mix(in srgb, #a86400 8%, transparent); }
+.swagger-ui .opblock.opblock-delete { border-color: #b3261e; background: color-mix(in srgb, #b3261e 8%, transparent); }
+.swagger-ui .opblock.opblock-patch { border-color: #7a4aa0; background: color-mix(in srgb, #7a4aa0 8%, transparent); }
