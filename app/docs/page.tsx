@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import 'swagger-ui-react/swagger-ui.css';
 import './swagger-overrides.css';
 import { Page } from '@/components/ui';
+import { sameOriginUrl, specForOrigin } from '@/lib/docsOrigin';
 
 // Swagger UI renders the contract this deployment serves at /openapi.yaml. It only runs in the browser.
 const SwaggerUI = dynamic(() => import('swagger-ui-react'), {
@@ -19,7 +20,20 @@ export default function DocsPage() {
         <code className="rounded-xs bg-subtle px-1 font-mono">X-API-Key</code> header; website calls send a login token. Swagger UI cannot open the WebSocket endpoint.
       </p>
       <div className="overflow-x-auto rounded-md border border-line-strong bg-surface px-2 py-2 sm:px-4">
-        <SwaggerUI url="/openapi.yaml" docExpansion="list" defaultModelsExpandDepth={0} />
+        <SwaggerUI
+          url="/openapi.yaml"
+          docExpansion="list"
+          defaultModelsExpandDepth={0}
+          // The contract names http://localhost:3000; calls and examples must use the address this page was opened on.
+          requestInterceptor={(request) => ({ ...request, url: sameOriginUrl(request.url, window.location.origin) })}
+          responseInterceptor={(response) => {
+            if (typeof response.text === 'string' && response.url.endsWith('/openapi.yaml')) {
+              const text = specForOrigin(response.text, window.location.origin);
+              return { ...response, text, data: text };
+            }
+            return response;
+          }}
+        />
       </div>
     </Page>
   );
