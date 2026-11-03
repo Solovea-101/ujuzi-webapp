@@ -31,10 +31,10 @@ services:
         value: https://kaziconnect1-1xmu.onrender.com
       - key: KAZI_WS_URL
         value: wss://kaziconnect1-1xmu.onrender.com
-      - key: KAZI_API_KEY
-        sync: false # only when Kazi Connect has API keys switched on: the key Kazi issued to Ujuzi
-      - key: STAFF_INVITE_CODE
-        sync: false # leave unset to keep staff sign-up closed
+      # Two optional settings are NOT listed here on purpose: Render asks for every "sync: false" value on the first
+      # Blueprint creation and ignores them afterwards. Add them in the dashboard (Environment) only when needed:
+      #   STAFF_INVITE_CODE  opens staff sign-up; with none set it stays closed
+      #   KAZI_API_KEY       only when Kazi Connect has API keys switched on: the key Kazi issued to Ujuzi
       - key: SEED_ON_START
         value: "true" # demo data into an EMPTY database; remove once real data exists
       - key: SEED_PASSWORD
@@ -42,6 +42,8 @@ services:
 
 databases:
   - name: ujuzi-db
+    # Render allows ONE active free PostgreSQL per workspace, and a free one expires 30 days after creation (14 days
+    # of grace, no backups). If the workspace already has a free database, or this must last, use a paid plan here.
     plan: free
     databaseName: ujuzi
     user: ujuzi
