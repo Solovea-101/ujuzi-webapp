@@ -9,6 +9,7 @@ import { userForToken } from './lib/auth/session';
 import { prepareDatabase } from './lib/db/startup';
 import { installRealtime } from './lib/realtime/hooks';
 import { registerFeedClient } from './lib/realtime/graduateFeed';
+import { routeUpgrade } from './lib/realtime/upgradeRoute';
 import { getSubscriber } from './lib/realtime/kaziSubscriber';
 
 /** Route handlers cannot accept WebSocket upgrades, so this one path is served from here. */
@@ -125,24 +126,24 @@ export function createServer(): Server {
   const feed = new WebSocketServer({ noServer: true, maxPayload: 4096 });
   const subscriber = getSubscriber();
   installRealtime(subscriber);
-  const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
-    const { pathname } = new URL(req.url ?? '/', 'http://localhost');
-    if (pathname === FEED_PATH) {
-      feed.handleUpgrade(req, socket, head, (ws) => onFeedConnection(ws, req));
-    } else if (dev) {
-      // Next's own dev sockets (hot reload) arrive here too.
-      ready.then(() => app.getUpgradeHandler()(req, socket, head)).catch(() => socket.destroy());
-    } else {
-      socket.destroy();
-    }
+  const onFeed = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+    feed.handleUpgrade(req, socket, head, (ws) => onFeedConnection(ws, req));
   };
-  // Ujuzi owns the 'upgrade' event. On its first request Next adds an upgrade listener of its own to this
-  // server, and that one closes any socket it does not recognise, including the feed. So 'upgrade' is not
-  // dispatched to listeners at all: onUpgrade runs, and calls Next itself where Next should be asked.
+  // Ujuzi owns the 'upgrade' event for its own socket. On its first request Next adds an upgrade listener of its
+  // own to this server, and that one closes any socket it does not recognise, including the feed. So the feed is
+  // taken here and never reaches Next's listener. In development every other upgrade (Next's hot-reload socket) is
+  // passed on untouched, exactly as a plain Next server would; in production nothing else may upgrade.
   const emit = server.emit.bind(server);
   server.emit = ((event: string | symbol, ...args: unknown[]) => {
     if (event !== 'upgrade') return emit(event, ...args);
-    onUpgrade(...(args as [IncomingMessage, Duplex, Buffer]));
+    const [req, socket, head] = args as [IncomingMessage, Duplex, Buffer];
+    const route = routeUpgrade(new URL(req.url ?? '/', 'http://localhost').pathname, dev, FEED_PATH);
+    if (route === 'feed') {
+      onFeed(req, socket, head);
+      return true;
+    }
+    if (route === 'next') return emit(event, ...args);
+    socket.destroy();
     return true;
   }) as typeof server.emit;
 
