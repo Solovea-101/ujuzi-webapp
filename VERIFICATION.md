@@ -6,9 +6,9 @@ The script starts the server with the in-memory store, sends real requests to ev
 
 ## Latest run
 
-- Contract: `openapi.yaml` version 0.4.0 (OpenAPI 3.0.3).
-- Operations: 25 of 25 built, 0 not built yet.
-- Cases: 196 sent, 196 passed, 0 failed.
+- Contract: `openapi.yaml` version 0.5.0 (OpenAPI 3.0.3).
+- Operations: 26 of 26 built, 0 not built yet.
+- Cases: 199 sent, 199 passed, 0 failed.
 - Result: **PASS**
 
 "Fields checked" counts every field in the answer that was compared with the contract for its exact name, type, allowed values and format. Dates must be UTC with a Z and no milliseconds. A field the contract does not declare, or a declared field that is missing, fails the case.
@@ -149,6 +149,9 @@ The script starts the server with the in-memory store, sends real requests to ev
 | `GET /api/courses/{courseId}/job-matches` | nothing matches: [] with 200 | `/api/courses/crs_509/job-matches` | 200 | 200 | 0 |  | pass |
 | `GET /api/courses/{courseId}/job-matches` | an unknown county: 400 | `/api/courses/crs_501/job-matches?county=Narnia` | 400 | 400 | 1 |  | pass |
 | `GET /api/courses/{courseId}/job-matches` | an unknown course: 404 | `/api/courses/crs_999/job-matches` | 404 | 404 | 1 |  | pass |
+| `GET /api/stats` | the totals, with a partner key | `/api/stats` | 200 | 200 | 187 |  | pass |
+| `GET /api/stats` | no key: 401 | `/api/stats` | 401 | 401 | 1 |  | pass |
+| `GET /api/stats` | a key we never issued: 401 | `/api/stats` | 401 | 401 | 1 |  | pass |
 | `GET /api/courses/{courseId}/job-matches` | no token: 401 | `/api/courses/crs_501/job-matches` | 401 | 401 | 1 |  | pass |
 | `GET /api/courses/{courseId}/job-matches` | Kazi down: our own 502 | `/api/courses/crs_502/job-matches` | 502 | 502 | 1 |  | pass |
 | `POST /api/me/applications` | applies for a job at Kazi: 201, saved, in the list | `/api/me/applications` | 201 | 201 | 6 | `GET /api/me/applications -> 200` | pass |

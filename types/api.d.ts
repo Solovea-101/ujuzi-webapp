@@ -166,7 +166,7 @@ export interface paths {
         };
         /**
          * Live Kazi Connect jobs that match a course (Endpoint 14, G3)
-         * @description The active Kazi Connect jobs in the course's category, in the county asked for (by default the course's own county). They are read through Kazi Connect, so an answer can be up to 5 minutes old. When Kazi cannot be reached this answers 502 and nothing else in the API is affected.
+         * @description The active Kazi Connect jobs in the course's category, in the county asked for (by default the course's own county). They are read through Kazi Connect, so an answer can be up to 5 minutes old. When Kazi cannot be reached but this question was answered earlier (up to an hour ago), the last good list is returned as a saved copy: still 200 and a bare array, with the headers X-Data-Stale: true and X-Data-As-Of (when Kazi gave it). With nothing saved this answers 502. Nothing else in the API is affected.
          */
         get: {
             parameters: {
@@ -185,6 +185,10 @@ export interface paths {
                 /** @description The matching jobs; an empty array when there are none */
                 200: {
                     headers: {
+                        /** @description Sent, with the value true, only when the list is a saved copy because Kazi Connect could not be reached. Absent for live data. */
+                        "X-Data-Stale"?: "true";
+                        /** @description Sent with X-Data-Stale. When Kazi Connect gave this list, UTC, ending in Z, no milliseconds. */
+                        "X-Data-As-Of"?: string;
                         [name: string]: unknown;
                     };
                     content: {
@@ -1016,6 +1020,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Running totals of the API's own traffic (Endpoint 26, operations)
+         * @description Requests since the server started: how many, how many were 4xx (usually the caller's mistake) and 5xx (ours), the error rate (5xx only), the average time, a breakdown per route pattern (so /api/courses/crs_501 and /api/courses/crs_9999 are one row), who called (key-xxxxxx is the first six characters of the hash of a valid partner key; none, bad-key and login are the others), and the state of the link to Kazi Connect. The numbers are kept in memory: they restart from zero with the server and are not shared between server copies. The request itself is not counted in its own reply. Nothing here holds a key, a token, a query string or a body.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The totals */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Stats"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                429: components["responses"]["TooManyRequests"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1378,6 +1423,122 @@ export interface components {
              * @example 2026-11-21T08:30:00Z
              */
             updatedAt: string;
+        };
+        RouteStats: {
+            /** @example 44 */
+            count: number;
+            /**
+             * @description Requests answered 4xx
+             * @example 15
+             */
+            clientErrors: number;
+            /**
+             * @description Requests answered 5xx
+             * @example 0
+             */
+            serverErrors: number;
+            /**
+             * @description Mean response time in milliseconds
+             * @example 17.8
+             */
+            avgMs: number;
+            /**
+             * @description The slowest single request in milliseconds
+             * @example 619.7
+             */
+            maxMs: number;
+        };
+        Stats: {
+            /**
+             * Format: date-time
+             * @example 2026-11-05T14:20:22Z
+             */
+            startedAt: string;
+            /** @example 634 */
+            uptimeSeconds: number;
+            /**
+             * @description Requests finished since the server started
+             * @example 183
+             */
+            total: number;
+            /**
+             * @description 4xx
+             * @example 67
+             */
+            clientErrors: number;
+            /**
+             * @description 5xx
+             * @example 0
+             */
+            serverErrors: number;
+            /**
+             * @description serverErrors divided by total
+             * @example 0
+             */
+            errorRatePercent: number;
+            /** @example 10.3 */
+            avgMs: number;
+            /**
+             * @description Requests by status code
+             * @example {
+             *       "200": 116,
+             *       "400": 15,
+             *       "401": 18,
+             *       "404": 34
+             *     }
+             */
+            statuses: {
+                [key: string]: number;
+            };
+            /**
+             * @description Requests by who called, as key-xxxxxx, bad-key, login or none
+             * @example {
+             *       "key-3b265a": 106,
+             *       "key-55dc13": 59,
+             *       "none": 18
+             *     }
+             */
+            callers: {
+                [key: string]: number;
+            };
+            /** @description Per route pattern, written as in this contract; a path no route has is "GET (no route)" */
+            routes: {
+                [key: string]: components["schemas"]["RouteStats"];
+            };
+            /** @description The link to Kazi Connect */
+            kazi: {
+                /** @example 6 */
+                calls: number;
+                /**
+                 * @description Calls that ended in failure: down, too slow, a 5xx or unreadable
+                 * @example 3
+                 */
+                failures: number;
+                /**
+                 * @description Extra attempts after a failed read
+                 * @example 6
+                 */
+                retries: number;
+                /**
+                 * @description Calls Kazi answered 429
+                 * @example 0
+                 */
+                rateLimited: number;
+                /**
+                 * @description Times a saved copy of the jobs was served
+                 * @example 2
+                 */
+                staleServed: number;
+                /**
+                 * @description Failures by cause, for example timeout, ECONNREFUSED, HTTP 503
+                 * @example {
+                 *       "ECONNREFUSED": 3
+                 *     }
+                 */
+                failuresByReason: {
+                    [key: string]: number;
+                };
+            };
         };
         Error: {
             /** @example Course crs_999 not found */

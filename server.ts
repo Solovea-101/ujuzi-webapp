@@ -7,6 +7,7 @@ import { countPartnerKeys } from './lib/auth/partnerKey';
 import { getStore } from './lib/db';
 import { userForToken } from './lib/auth/session';
 import { prepareDatabase } from './lib/db/startup';
+import { monitor } from './lib/monitoring';
 import { installRealtime } from './lib/realtime/hooks';
 import { registerFeedClient } from './lib/realtime/graduateFeed';
 import { routeUpgrade } from './lib/realtime/upgradeRoute';
@@ -100,6 +101,8 @@ export function createServer(): Server {
   ready.catch((err) => console.error('Next failed to prepare:', err));
 
   const server = createHttpServer(async (req, res) => {
+    // First of all, so that every answer is logged and counted, including the ones that reject a request.
+    monitor(req, res);
     // The real peer address, for rate limiting. Always overwritten, so a client cannot choose its own.
     req.headers['x-ujuzi-peer'] = req.socket.remoteAddress ?? 'unknown';
     if (!hasDecodablePath(req.url)) {

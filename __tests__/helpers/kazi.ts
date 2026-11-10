@@ -1,7 +1,8 @@
 import { clearKaziCache } from '@/lib/clients/fetcher';
+import { resetKaziMetrics } from '@/lib/clients/kaziMetrics';
 import { startKaziStub, type KaziStub, type StubJob } from './kaziStub';
 
-const KEYS = ['KAZI_API_KEY', 'KAZI_API_URL', 'KAZI_WS_URL', 'KAZI_USER_TIMEOUT_MS', 'KAZI_BACKGROUND_TIMEOUT_MS', 'KAZI_CACHE_MS', 'KAZI_POLL_MS', 'KAZI_BACKOFF_BASE_MS', 'KAZI_BACKOFF_MAX_MS'] as const;
+const KEYS = ['KAZI_API_KEY', 'KAZI_API_URL', 'KAZI_WS_URL', 'KAZI_USER_TIMEOUT_MS', 'KAZI_BACKGROUND_TIMEOUT_MS', 'KAZI_CACHE_MS', 'KAZI_ATTEMPT_TIMEOUT_MS', 'KAZI_RETRIES', 'KAZI_RETRY_DELAY_MS', 'KAZI_STALE_MS', 'KAZI_POLL_MS', 'KAZI_BACKOFF_BASE_MS', 'KAZI_BACKOFF_MAX_MS'] as const;
 
 /** Points Ujuzi at a fresh stub Kazi with fast timers, and gives the environment back afterwards. */
 export function useKaziStub(jobs?: StubJob[]) {
@@ -23,11 +24,16 @@ export function useKaziStub(jobs?: StubJob[]) {
     await handle.stub.up().catch(() => undefined);
     handle.stub.reset(jobs);
     clearKaziCache();
+    resetKaziMetrics();
     process.env.KAZI_API_URL = handle.stub.url;
     process.env.KAZI_WS_URL = handle.stub.wsUrl;
     process.env.KAZI_USER_TIMEOUT_MS = '1500';
     process.env.KAZI_BACKGROUND_TIMEOUT_MS = '1500';
     delete process.env.KAZI_CACHE_MS;
+    delete process.env.KAZI_ATTEMPT_TIMEOUT_MS;
+    delete process.env.KAZI_RETRIES;
+    delete process.env.KAZI_STALE_MS;
+    process.env.KAZI_RETRY_DELAY_MS = '5'; // retries are real, their waits are short
     delete process.env.KAZI_API_KEY;
     process.env.KAZI_POLL_MS = '60000';
     process.env.KAZI_BACKOFF_BASE_MS = '30';

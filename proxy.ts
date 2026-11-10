@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
-  'Access-Control-Expose-Headers': 'Location, Retry-After',
+  'Access-Control-Expose-Headers': 'Location, Retry-After, X-Data-Stale, X-Data-As-Of',
   'Access-Control-Max-Age': '86400',
 };
 

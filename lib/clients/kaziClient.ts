@@ -1,5 +1,5 @@
 import type { components } from '@/types/kazi';
-import { cached, fetchKazi, KaziRejectedError, KaziUnavailableError, type KaziAnswer } from './fetcher';
+import { cachedOrStale, fetchKazi, KaziRejectedError, KaziUnavailableError, type KaziAnswer, type Remembered } from './fetcher';
 
 /**
  * The only file that knows Kazi Connect's address, paths and field names (typed from types/kazi.d.ts,
@@ -62,18 +62,26 @@ function refuse(answer: KaziAnswer): never {
 
 // ---- Jobs (endpoints 1 and 2): cached for 5 minutes -----------------------------------------------------
 
-/** Active jobs, optionally narrowed to a county and a category (Kazi matches both ignoring case). */
-export async function listActiveJobs(filter: { county?: string; category?: string } = {}): Promise<KaziJob[]> {
+/**
+ * Active jobs, optionally narrowed to a county and a category (Kazi matches both ignoring case), with whether
+ * they are saved data: when Kazi cannot be reached the last good list is returned, flagged stale and dated.
+ */
+export async function readActiveJobs(filter: { county?: string; category?: string } = {}): Promise<Remembered<KaziJob[]>> {
   const query = new URLSearchParams({ status: 'active' });
   if (filter.county) query.set('county', filter.county);
   if (filter.category) query.set('category', filter.category);
   const url = `${base('KAZI_API_URL')}/api/jobs?${query}`;
 
-  return cached(url, async () => {
+  return cachedOrStale(url, async () => {
     const answer = await fetchKazi(url, { mode: 'user' });
     if (answer.status !== 200 || !Array.isArray(answer.body)) throw new KaziUnavailableError(`Kazi Connect answered ${answer.status} to the job list`);
     return answer.body.map(asJob).filter((job): job is KaziJob => job !== undefined);
   });
+}
+
+/** The same list without the freshness: for callers that only need the jobs. */
+export async function listActiveJobs(filter: { county?: string; category?: string } = {}): Promise<KaziJob[]> {
+  return (await readActiveJobs(filter)).value;
 }
 
 // ---- Applications (endpoints 5, 7, 8, 9) ----------------------------------------------------------------

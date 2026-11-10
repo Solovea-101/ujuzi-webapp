@@ -1,0 +1,9 @@
+Status codes received: { '200': 35, '401': 8, '404': 17 }
+Sent, by kind: {
+  'GET /api/jobs/job_N/status': 13,
+  'GET /api/not-a-route': 9,
+  'GET /api/jobs': 15,
+  'GET /api/jobs/job_N': 15,
+  'GET /api/jobs (no key)': 8
+}
+Started 2026-11-10T15:01:46.223Z, finished 2026-11-10T15:02:28.619Z (60 requests, 700 ms apart)

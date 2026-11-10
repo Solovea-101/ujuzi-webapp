@@ -67,11 +67,11 @@ describe('the Kazi client and KAZI_API_KEY', () => {
   });
 
   it('reads Retry-After from a 429', async () => {
-    kazi.stub.rateLimit(2);
+    kazi.stub.rateLimit(30); // longer than a person waits, so it is handed back at once (a short one is waited out: see kaziResilience.test.ts)
     const err = await listActiveJobs().catch((e) => e);
     expect(isKaziRateLimited(err)).toBe(true);
     expect(isKaziUnavailable(err)).toBe(true); // answered like any Kazi failure
-    expect(err.retryAfterMs).toBe(2000);
+    expect(err.retryAfterMs).toBe(30_000);
   });
 });
 

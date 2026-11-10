@@ -1,8 +1,8 @@
-# Ujuzi API contract 0.4.0: the partner endpoints 1-7 and 24 (Sherehe, needs S1-S5) and the website endpoints 8-23 and 25.
+# Ujuzi API contract 0.5.0: the partner endpoints 1-7 and 24 (Sherehe, needs S1-S5), the website endpoints 8-23 and 25, and the operations endpoint 26.
 openapi: 3.0.3
 info:
   title: Ujuzi API
-  version: 0.4.0
+  version: 0.5.0
   description: >
     Short courses, certificate checks and group training bookings for Sherehe (needs S1-S5), plus the
     Ujuzi website: accounts, enrolments, live Kazi Connect job matches and applications, and the staff
@@ -131,7 +131,9 @@ paths:
       description: >
         The active Kazi Connect jobs in the course's category, in the county asked for (by default the
         course's own county). They are read through Kazi Connect, so an answer can be up to 5 minutes old.
-        When Kazi cannot be reached this answers 502 and nothing else in the API is affected.
+        When Kazi cannot be reached but this question was answered earlier (up to an hour ago), the last good
+        list is returned as a saved copy: still 200 and a bare array, with the headers X-Data-Stale: true and
+        X-Data-As-Of (when Kazi gave it). With nothing saved this answers 502. Nothing else in the API is affected.
       security: [{ userToken: [] }]
       parameters:
         - $ref: '#/components/parameters/CourseId'
@@ -143,6 +145,13 @@ paths:
       responses:
         '200':
           description: The matching jobs; an empty array when there are none
+          headers:
+            X-Data-Stale:
+              description: Sent, with the value true, only when the list is a saved copy because Kazi Connect could not be reached. Absent for live data.
+              schema: { type: string, enum: ['true'], example: 'true' }
+            X-Data-As-Of:
+              description: Sent with X-Data-Stale. When Kazi Connect gave this list, UTC, ending in Z, no milliseconds.
+              schema: { type: string, example: '2026-11-10T14:32:53Z' }
           content:
             application/json:
               schema:
@@ -576,6 +585,27 @@ paths:
         '502': { $ref: '#/components/responses/BadGateway' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  /api/stats:
+    get:
+      summary: Running totals of the API's own traffic (Endpoint 26, operations)
+      description: >
+        Requests since the server started: how many, how many were 4xx (usually the caller's mistake) and 5xx
+        (ours), the error rate (5xx only), the average time, a breakdown per route pattern (so /api/courses/crs_501
+        and /api/courses/crs_9999 are one row), who called (key-xxxxxx is the first six characters of the hash of
+        a valid partner key; none, bad-key and login are the others), and the state of the link to Kazi Connect.
+        The numbers are kept in memory: they restart from zero with the server and are not shared between server
+        copies. The request itself is not counted in its own reply. Nothing here holds a key, a token, a query
+        string or a body.
+      security: [{ partnerKey: [] }]
+      responses:
+        '200':
+          description: The totals
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Stats' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
 components:
   securitySchemes:
     partnerKey:
@@ -963,6 +993,55 @@ components:
         status: { type: string, enum: [pending, accepted, filled, cancelled], example: accepted }
         updatedAt: { type: string, format: date-time, example: '2026-11-21T08:30:00Z' }
 
+    RouteStats:
+      type: object
+      required: [count, clientErrors, serverErrors, avgMs, maxMs]
+      properties:
+        count: { type: integer, example: 44 }
+        clientErrors: { type: integer, description: Requests answered 4xx, example: 15 }
+        serverErrors: { type: integer, description: Requests answered 5xx, example: 0 }
+        avgMs: { type: number, description: Mean response time in milliseconds, example: 17.8 }
+        maxMs: { type: number, description: The slowest single request in milliseconds, example: 619.7 }
+    Stats:
+      type: object
+      required: [startedAt, uptimeSeconds, total, clientErrors, serverErrors, errorRatePercent, avgMs, statuses, callers, routes, kazi]
+      properties:
+        startedAt: { type: string, format: date-time, example: '2026-11-05T14:20:22Z' }
+        uptimeSeconds: { type: integer, example: 634 }
+        total: { type: integer, description: Requests finished since the server started, example: 183 }
+        clientErrors: { type: integer, description: 4xx, example: 67 }
+        serverErrors: { type: integer, description: 5xx, example: 0 }
+        errorRatePercent: { type: number, description: serverErrors divided by total, as a percent, example: 0 }
+        avgMs: { type: number, example: 10.3 }
+        statuses:
+          type: object
+          description: Requests by status code
+          additionalProperties: { type: integer }
+          example: { '200': 116, '400': 15, '401': 18, '404': 34 }
+        callers:
+          type: object
+          description: Requests by who called, as key-xxxxxx, bad-key, login or none
+          additionalProperties: { type: integer }
+          example: { key-3b265a: 106, key-55dc13: 59, none: 18 }
+        routes:
+          type: object
+          description: Per route pattern, written as in this contract; a path no route has is "GET (no route)"
+          additionalProperties: { $ref: '#/components/schemas/RouteStats' }
+        kazi:
+          type: object
+          description: The link to Kazi Connect
+          required: [calls, failures, retries, rateLimited, staleServed, failuresByReason]
+          properties:
+            calls: { type: integer, example: 6 }
+            failures: { type: integer, description: 'Calls that ended in failure: down, too slow, a 5xx or unreadable', example: 3 }
+            retries: { type: integer, description: Extra attempts after a failed read, example: 6 }
+            rateLimited: { type: integer, description: Calls Kazi answered 429, example: 0 }
+            staleServed: { type: integer, description: Times a saved copy of the jobs was served, example: 2 }
+            failuresByReason:
+              type: object
+              description: 'Failures by cause, for example timeout, ECONNREFUSED, HTTP 503'
+              additionalProperties: { type: integer }
+              example: { ECONNREFUSED: 3 }
     Error:
       type: object
       required: [message]
