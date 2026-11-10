@@ -62,6 +62,10 @@ export class KaziStub {
   /** The X-API-Key of every request and upgrade received (undefined when none was sent), in order. */
   keysSeen: Array<string | undefined> = [];
   private delayMs = 0;
+  private slowFirstMs = 0;
+  private slowTimes = 0;
+  private failStatus: number | undefined;
+  private failTimes = 0;
   private nextId = 1005;
   private port = 0;
 
@@ -133,12 +137,27 @@ export class KaziStub {
     this.delayMs = ms;
   }
 
+  /** Only the next `times` requests wait `ms` first, then Kazi is quick again: a slow moment, not a slow Kazi. */
+  slowFor(ms: number, times: number): void {
+    this.slowFirstMs = ms;
+    this.slowTimes = times;
+  }
+
+  /** The next `times` requests (all of them by default) answer this status with { message }, like a flaky Kazi. Undefined stops it. */
+  failWith(status: number | undefined, times = Number.POSITIVE_INFINITY): void {
+    this.failStatus = status;
+    this.failTimes = times;
+  }
+
   /** Back to a pristine Kazi: no applications, numbering from app_1005, the original jobs, no delay. */
   reset(jobs: StubJob[] = SAMPLE_JOBS): void {
     this.applications.clear();
     this.requests.length = 0;
     this.nextId = 1005;
     this.delayMs = 0;
+    this.slowTimes = 0;
+    this.failStatus = undefined;
+    this.failTimes = 0;
     this.hanging = false;
     this.requiredKey = undefined;
     this.limitSeconds = 0;
@@ -238,6 +257,14 @@ export class KaziStub {
     const method = req.method ?? 'GET';
     this.requests.push(`${method} ${url.pathname}${url.search}`);
     if (this.hanging) return; // never answer
+    if (this.slowTimes > 0) {
+      this.slowTimes -= 1;
+      await new Promise((resolve) => setTimeout(resolve, this.slowFirstMs));
+    }
+    if (this.failStatus !== undefined && this.failTimes > 0) {
+      this.failTimes -= 1;
+      return this.send(res, this.failStatus, { message: 'Try again' }); // a flaky Kazi: fails, then works again
+    }
     if (this.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.delayMs));
     const refusal = this.refusal(req);
     if (refusal?.status === 401) return this.send(res, 401, { message: 'Missing or invalid API key' });

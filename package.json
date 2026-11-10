@@ -19,7 +19,10 @@
     "key:issue": "tsx scripts/issuePartnerKey.ts",
     "test:partner": "jest --runInBand --testMatch '<rootDir>/partner-tests/**/*.test.ts'",
     "ring:check": "tsx scripts/ringCheck.ts",
-    "security:probe": "tsx scripts/securityProbe.ts"
+    "security:probe": "tsx scripts/securityProbe.ts",
+    "partner:flaky": "tsx scripts/flakyPartner.ts",
+    "traffic": "tsx scripts/traffic.ts",
+    "drill:resilience": "tsx scripts/resilienceDrill.ts"
   },
   "dependencies": {
     "@next/env": "^16.4.2",

@@ -1,0 +1,72 @@
+{
+    "startedAt": "2026-11-05T14:20:22Z",
+    "uptimeSeconds": 634,
+    "total": 183,
+    "clientErrors": 67,
+    "serverErrors": 0,
+    "errorRatePercent": 0,
+    "avgMs": 10.3,
+    "statuses": {
+        "200": 116,
+        "400": 15,
+        "401": 18,
+        "404": 34
+    },
+    "callers": {
+        "key-55dc13": 59,
+        "key-3b265a": 106,
+        "none": 18
+    },
+    "routes": {
+        "GET /api/courses": {
+            "count": 100,
+            "clientErrors": 28,
+            "serverErrors": 0,
+            "avgMs": 6.5,
+            "maxMs": 106.7
+        },
+        "GET /api/stats": {
+            "count": 3,
+            "clientErrors": 0,
+            "serverErrors": 0,
+            "avgMs": 1.9,
+            "maxMs": 2.6
+        },
+        "GET /api/courses/{courseId}": {
+            "count": 44,
+            "clientErrors": 15,
+            "serverErrors": 0,
+            "avgMs": 17.8,
+            "maxMs": 619.7
+        },
+        "GET /api/certificates/{certificateNo}": {
+            "count": 27,
+            "clientErrors": 15,
+            "serverErrors": 0,
+            "avgMs": 12.8,
+            "maxMs": 139.5
+        },
+        "POST /api/bookings": {
+            "count": 5,
+            "clientErrors": 5,
+            "serverErrors": 0,
+            "avgMs": 15.4,
+            "maxMs": 63.2
+        },
+        "GET (no route)": {
+            "count": 4,
+            "clientErrors": 4,
+            "serverErrors": 0,
+            "avgMs": 3.9,
+            "maxMs": 7.9
+        }
+    },
+    "kazi": {
+        "calls": 0,
+        "failures": 0,
+        "retries": 0,
+        "rateLimited": 0,
+        "staleServed": 0,
+        "failuresByReason": {}
+    }
+}

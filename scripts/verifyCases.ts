@@ -298,6 +298,10 @@ export const CASES: readonly VerifyCase[] = [
   { operation: 'GET /api/courses/{courseId}/job-matches', name: 'nothing matches: [] with 200', request: '/api/courses/crs_509/job-matches', status: 200 },
   { operation: 'GET /api/courses/{courseId}/job-matches', name: 'an unknown county: 400', request: '/api/courses/crs_501/job-matches?county=Narnia', status: 400 },
   { operation: 'GET /api/courses/{courseId}/job-matches', name: 'an unknown course: 404', request: '/api/courses/crs_999/job-matches', status: 404 },
+  // Endpoint 26 (operations): the running totals, for a partner key only.
+  { operation: 'GET /api/stats', name: 'the totals, with a partner key', request: '/api/stats', status: 200 },
+  { operation: 'GET /api/stats', name: 'no key: 401', request: '/api/stats', status: 401, as: 'none' },
+  { operation: 'GET /api/stats', name: 'a key we never issued: 401', request: '/api/stats', status: 401, as: 'wrongKey' },
   { operation: 'GET /api/courses/{courseId}/job-matches', name: 'no token: 401', request: '/api/courses/crs_501/job-matches', status: 401, as: 'none' },
   { operation: 'GET /api/courses/{courseId}/job-matches', name: 'Kazi down: our own 502', request: '/api/courses/crs_502/job-matches', status: 502, kaziDown: true },
 
