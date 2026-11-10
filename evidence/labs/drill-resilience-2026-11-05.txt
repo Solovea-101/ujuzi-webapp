@@ -1,0 +1,11 @@
+Ujuzi http://localhost:4412, partner stand-in http://localhost:4401
+
+slow, nothing saved yet (answers after 10 s)   HTTP 502  message="Kazi Connect could not be reached. Try again in a minute."  (9.62 s)
+error, nothing saved yet (always 500)          HTTP 502  message="Kazi Connect could not be reached. Try again in a minute."  (0.61 s)
+ok (a good answer is now saved)                HTTP 200  2 jobs  (0.01 s)
+flaky #1 (fails twice, then works)             HTTP 200  2 jobs  (0.61 s)
+flaky #2 (fails twice, then works)             HTTP 200  2 jobs  (0.62 s)
+flaky #3 (fails twice, then works)             HTTP 200  2 jobs  (0.61 s)
+error, with a saved copy                       HTTP 200  2 jobs, SAVED COPY from 2026-11-05T14:31:31Z  (0.61 s)
+slow, with a saved copy                        HTTP 200  2 jobs, SAVED COPY from 2026-11-05T14:31:31Z  (9.64 s)
+ok again: live data is back                    HTTP 200  2 jobs  (0.09 s)

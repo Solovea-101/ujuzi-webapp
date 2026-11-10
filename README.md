@@ -180,6 +180,57 @@ HTTP/1.1 401 Unauthorized
 {"message":"Send your partner key as X-API-Key, or log in and send Authorization: Bearer YOUR_TOKEN"}
 ```
 
+## When Kazi Connect is slow or down
+
+Ujuzi reads live jobs from Kazi Connect (`GET /api/courses/{courseId}/job-matches`) and Kazi runs on a free server that sleeps. A slow or failing Kazi never takes Ujuzi down: courses, certificates and bookings do not call Kazi at all.
+
+| Situation | What the person sees | What Ujuzi did |
+|---|---|---|
+| Kazi answers | The live jobs | One request |
+| Kazi fails now and then (a 500, 502, 503 or 504, a dropped connection, a slow moment) | The live jobs, a little late | Up to **2 retries**, after 200 ms and then 400 ms, inside one 10 second budget; each attempt gets at most 3 seconds |
+| Kazi is down or too slow, and this question was answered earlier (up to an hour ago) | The **saved jobs**, with the banner "Showing saved jobs from 14:05. Kazi Connect is not responding" | The last good list, kept in memory: the answer is still `200` and a bare array, with the headers `X-Data-Stale: true` and `X-Data-As-Of: 2026-11-04T09:12:21Z` |
+| Kazi is down and nothing is saved (first look, or after a restart) | "Kazi Connect could not be reached. Try again in a minute." | `502 { "message": "..." }` |
+| Kazi asks us to slow down (`429`) | As above | A `Retry-After` of up to 5 seconds is waited for; a longer one is not (the person would be left waiting) |
+
+Never retried: a `400`, `401`, `403`, `404` or `409` (asking again changes nothing) and anything that writes (apply, change, withdraw: a retry might do it twice). The saved copy is in this server's memory only, so a restart clears it. Every failure is logged with its cause, for example `kazi GET /api/jobs failed: ECONNREFUSED` (nothing is listening), `ENOTFOUND` (the address is wrong), `timeout` or `HTTP 503`, and the log never holds the key, a query or a body. The numbers, how they were chosen and what was measured are in `RESILIENCE_NOTES.md`; to watch it happen, run the stand-in partner (`npm run partner:flaky`, modes `ok`, `slow`, `flaky`, `error`, switched with `curl http://localhost:4000/__mode/slow`) and start Ujuzi with `KAZI_API_URL=http://localhost:4000`.
+
+## Monitoring: the request log and `GET /api/stats`
+
+**The log.** Every request to `/api` is printed as one line of JSON when its answer has been sent, so a rejected request (401, 429, a broken URL) is in it too:
+
+```
+{"time":"2026-11-05T14:20:22.630Z","method":"GET","path":"/api/courses","status":200,"ms":41,"caller":"key-55dc13","partner":"labs"}
+{"time":"2026-11-04T09:09:22.601Z","method":"GET","path":"/api/courses","status":401,"ms":1.9,"caller":"bad-key"}
+```
+
+`caller` is `key-xxxxxx` (six characters of the hash of a valid partner key, with the partner's name from `PARTNER_KEYS`), `bad-key`, `login` (a website token was sent) or `none`. The log never holds a key, a token, a password, a query string or a body. To keep it in a file: `npm start | tee requests.log` (`*.log` is ignored by git); `LOG_REQUESTS=false` turns it off.
+
+**The numbers.** `GET /api/stats` needs a partner key like the rest of the partner API (no key is a `401`) and answers the running totals since the server started. It is not part of `openapi.yaml` (the contract is frozen at 0.4.0; see `CONTRACT_DEVIATIONS.md`).
+
+```bash
+curl -s -H "X-API-Key: <your-api-key>" http://localhost:3000/api/stats
+```
+
+```json
+{
+  "startedAt": "2026-11-05T14:20:22Z",
+  "uptimeSeconds": 634,
+  "total": 183,
+  "clientErrors": 67,
+  "serverErrors": 0,
+  "errorRatePercent": 0,
+  "avgMs": 10.3,
+  "statuses": { "200": 116, "400": 15, "401": 18, "404": 34 },
+  "callers": { "key-3b265a": 106, "key-55dc13": 59, "none": 18 },
+  "routes": {
+    "GET /api/courses/{courseId}": { "count": 44, "clientErrors": 15, "serverErrors": 0, "avgMs": 17.8, "maxMs": 619.7 }
+  },
+  "kazi": { "calls": 0, "failures": 0, "retries": 0, "rateLimited": 0, "staleServed": 0, "failuresByReason": {} }
+}
+```
+
+(A real reply, shortened to one route; the full one is in `evidence/labs/stats-4013-2026-11-05.json`.) `clientErrors` are 4xx (usually the caller's mistake) and `serverErrors` are 5xx (ours): the error rate counts only 5xx. Routes are patterns, so `/api/courses/crs_501` and `/api/courses/crs_9999` are one row. `kazi` is the state of our link to Kazi Connect: how many calls, failures (by cause), retries, 429s and saved copies served. The numbers are in memory: they restart from zero with the server and are not shared between copies. `npm run traffic` sends a mix of requests to give them something to show.
+
 ## Error reference
 
 Every failure answers with one field, `message`, in plain English, and nothing is changed:
@@ -199,7 +250,7 @@ Every failure answers with one field, `message`, in plain English, and nothing i
 | 413 | Body too large | More than 20 KB of JSON |
 | 429 | Too many requests | Over the rate limit above, or an email locked after five wrong passwords; read `Retry-After` and wait |
 | 426 | Upgrade Required | Plain HTTP to the WebSocket endpoint |
-| 502 | Kazi Connect could not be reached | Kazi asleep or down; Ujuzi's other endpoints keep working. Try again in a minute |
+| 502 | Kazi Connect could not be reached | Kazi asleep, down or too slow, and no saved copy to show; Ujuzi's other endpoints keep working. Try again in a minute |
 
 The order of checks on every write is: login (401), the body (400, 413), the thing it names (404), ownership (403), then state (409).
 
@@ -227,10 +278,10 @@ npm test
 npm run verify
 ```
 
-`npm run verify` starts the app, sends every case in `scripts/verifyCases.ts` and compares each real answer with `openapi.yaml` field by field, then writes `VERIFICATION.md`. Other scripts: `npm run test:partner` (our tests of Kazi Connect, `KAZI_URL=http://localhost:4002 npm run test:partner`), `npm run ring:check` (one end-to-end look at Kazi and Ujuzi; needs `UJUZI_API_KEY`), `npm run security:probe` (the Week 9 attacks against a running copy; see `SECURITY_AUDIT.md`), `npm run key:issue`, `npm run types`.
+`npm run verify` starts the app, sends every case in `scripts/verifyCases.ts` and compares each real answer with `openapi.yaml` field by field, then writes `VERIFICATION.md`. Other scripts: `npm run test:partner` (our tests of Kazi Connect, `KAZI_URL=http://localhost:4002 npm run test:partner`), `npm run ring:check` (one end-to-end look at Kazi and Ujuzi; needs `UJUZI_API_KEY`), `npm run security:probe` (the Week 9 attacks against a running copy; see `SECURITY_AUDIT.md`), `npm run key:issue`, `npm run types`, `npm run partner:flaky` (a stand-in Kazi that you can make slow or flaky) and `npm run traffic` (a mix of requests to give the logs something to show).
 
 Settings (environment variables, see `.env.example`): `PORT` (default 3000), `DATABASE_URL`, `PARTNER_KEYS` (`name:hash` of the keys we accept), `SESSION_SECRET` (set a long random value outside local runs), `KAZI_API_URL` and `KAZI_WS_URL` (our upstream), `KAZI_API_KEY` (only when Kazi has API keys switched on; sent as `X-API-Key` on every call to Kazi and on its WebSocket; a 401 from Kazi is logged once as a key problem and answered with our own 502, a 429 is waited out), `STAFF_INVITE_CODE` (opens staff sign-up; closed when unset), `RATE_LIMIT_PARTNER`, `RATE_LIMIT_ANON`, `RATE_LIMIT_LOGIN`, `RATE_LIMIT_WINDOW_MS`, `TRUST_PROXY`, `TRUST_PROXY_HOPS` and `LOG_CLIENT_ADDRESS` (rate limiting, see above), `LOCKOUT_MAX_FAILURES`, `LOCKOUT_WINDOW_MINUTES` and `LOCKOUT_MINUTES` (sign-in lockout), `SEED_ON_START` and `SEED_PASSWORD` (demo data only: anyone who can reach a seeded deployment can log in as the sample staff with the default password, so set `SEED_PASSWORD`).
 
 ## More documents
 
-`TEAM_CHARTER.md`, `API_NEEDS.md`, `ENDPOINT_LIST.md`, `openapi.yaml`, `CONTRACT_QUESTIONS.md`, `CONTRACT_DEVIATIONS.md`, `VERIFICATION.md`, `PARTNER_TEST_RESULTS.md`, `PAUSED_ERRORS.md`, `SECURITY_AUDIT.md`, `BLIND_TEST_REPORT.md`.
+`TEAM_CHARTER.md`, `API_NEEDS.md`, `ENDPOINT_LIST.md`, `openapi.yaml`, `CONTRACT_QUESTIONS.md`, `CONTRACT_DEVIATIONS.md`, `VERIFICATION.md`, `PARTNER_TEST_RESULTS.md`, `PAUSED_ERRORS.md`, `SECURITY_AUDIT.md`, `BLIND_TEST_REPORT.md`, and for Weeks 10 to 12: `INTEGRATION_LOG.md` (every bug and surprise at the seam with our partners), `RESILIENCE_NOTES.md` (timeout, retries, saved data) and `MONITORING_NOTES.md` (logs and `/api/stats`).

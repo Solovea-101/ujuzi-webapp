@@ -13,3 +13,6 @@ next-env.d.ts
 .DS_Store
 npm-debug.log*
 .swc/
+
+# Request logs (npm start | tee requests.log): never committed.
+*.log

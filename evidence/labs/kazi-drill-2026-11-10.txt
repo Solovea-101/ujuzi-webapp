@@ -1,0 +1,9 @@
+14:33:29Z [Kazi STOPPED: saved copy expected] crs_501: HTTP 200, 36 jobs | x-data-stale: true | x-data-as-of: 2026-11-10T14:32:53Z (0.612602 s)
+14:33:30Z [Kazi STOPPED: second course, saved] crs_509: HTTP 200, 3 jobs | x-data-stale: true | x-data-as-of: 2026-11-10T14:32:53Z (0.611519 s)
+14:33:31Z [Kazi STOPPED: never read, nothing saved] crs_505: HTTP 502, message="Kazi Connect could not be reached. Try again in a minute." (0.608888 s)
+other routes while Kazi is down:
+GET /api/courses (partner key): 200
+GET /api/courses/crs_501: 200
+stats kazi: {'calls': 6, 'failures': 3, 'retries': 6, 'rateLimited': 0, 'staleServed': 2, 'failuresByReason': {'ECONNREFUSED': 3}}
+14:34:07Z [Kazi STARTED: live again] crs_501: HTTP 200, 36 jobs (0.005825 s)
+14:34:07Z [Kazi STARTED: the course that had failed] crs_505: HTTP 200, 3 jobs (0.003935 s)

@@ -38,6 +38,8 @@ export default function CoursePage() {
   const [enrolling, setEnrolling] = useState(false);
   const [jobs, setJobs] = useState<JobMatch[] | null>(null);
   const [jobsError, setJobsError] = useState<string | null>(null);
+  // When the job list is a saved copy because Kazi Connect is not answering: the time it was read.
+  const [jobsSavedAt, setJobsSavedAt] = useState<string | null>(null);
   const [applying, setApplying] = useState<string | null>(null);
   const [date, setDate] = useState('');
   const [note, setNote] = useState('');
@@ -51,9 +53,11 @@ export default function CoursePage() {
   const loadJobs = useCallback(async () => {
     setJobs(null);
     setJobsError(null);
+    setJobsSavedAt(null);
     const res = await api<JobMatch[]>(`/api/courses/${courseId}/job-matches`);
     if (res.ok) {
       setJobs(res.data);
+      setJobsSavedAt(res.savedAt ?? null);
       res.data.forEach(cacheJobContext); // so My applications can name the job later
     } else setJobsError(res.message);
   }, [courseId]);
@@ -146,6 +150,12 @@ export default function CoursePage() {
         <div className="mt-4 space-y-3">
           <ErrorNote message={jobsError} />
           {jobsError && <Button tone="plain" onClick={loadJobs}>Try again</Button>}
+          {jobsSavedAt && (
+            <div role="status" className="rounded-sm border-2 border-line-strong bg-subtle px-3 py-2 text-sm">
+              <p><strong>Showing saved jobs from {formatLocalDateTime(jobsSavedAt)}.</strong> Kazi Connect is not responding, so these may have changed.</p>
+              <p className="mt-2"><Button tone="plain" onClick={loadJobs}>Check again</Button></p>
+            </div>
+          )}
           {jobs === null && !jobsError && <><JobCardSkeleton /><JobCardSkeleton /></>}
           {jobs?.length === 0 && (
             <EmptyState title="No live jobs for this skill here right now">Jobs come and go during the day. Check back soon, or look at another county&apos;s courses.</EmptyState>

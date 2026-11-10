@@ -23,7 +23,10 @@ export function setToken(token: string | null): void {
 }
 
 /** A failure carries the message the API sent. `retryAfter` (seconds) is set when the API sent a Retry-After header, as on a 429. */
-export type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; message: string; retryAfter?: number };
+export type ApiResult<T> =
+  // `savedAt` is set when the API says the data is a saved copy (X-Data-Stale: true), with when it was read.
+  | { ok: true; data: T; savedAt?: string }
+  | { ok: false; status: number; message: string; retryAfter?: number };
 
 /** One call to our API with the login token attached. Never throws: a failure is { ok: false, message }. */
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<ApiResult<T>> {
@@ -45,7 +48,10 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     } catch {
       body = undefined;
     }
-    if (res.ok) return { ok: true, data: body as T };
+    if (res.ok) {
+      const savedAt = res.headers.get('x-data-stale') === 'true' ? res.headers.get('x-data-as-of') : null;
+      return { ok: true, data: body as T, ...(savedAt ? { savedAt } : {}) };
+    }
     const message = typeof body === 'object' && body !== null && 'message' in body ? String((body as { message: unknown }).message) : `Something went wrong (${res.status})`;
     const wait = Number(res.headers.get('retry-after'));
     return { ok: false, status: res.status, message, ...(Number.isFinite(wait) && wait > 0 ? { retryAfter: Math.ceil(wait) } : {}) };
