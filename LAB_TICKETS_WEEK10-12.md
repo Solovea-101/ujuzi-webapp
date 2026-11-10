@@ -23,6 +23,7 @@ Work that the coding agent could not or should not do. Each ticket says what, wh
 
 **Why a human:** CLAUDE.md R8: any contract change after handoff gets a `CONTRACT_DEVIATIONS.md` entry (written, 0.5.0) and the humans tell Sherehe's sub-team **before it is deployed**. The agents agreed names with each other, but an agent cannot approve for the team.
 **What:** tell them 0.5.0 adds `GET /api/stats` (Endpoint 26, partner key) and two response headers on `GET /api/courses/{courseId}/job-matches` (`X-Data-Stale`, `X-Data-As-Of`); nothing in S1 to S5 changes. Give them the new `openapi.yaml` when you are ready (handing it over is your call, per CLAUDE.md). Sherehe's agent has already said it will use the same two header names.
+**Progress:** Sherehe's agent has already compared 0.5.0 with its 0.4.0 copy (2026-11-10): everything it uses is identical, no objection, and it will copy the file only on a formal hand-over or deploy and wants to be told then, with the version. That is the agent's word; the team's own message is still needed.
 **Done when:** Sherehe's sub-team has acknowledged it, and you have noted the date in the "Flagged to Sherehe" line of the 0.5.0 entry in `CONTRACT_DEVIATIONS.md`.
 
 ## 3. Decide: refresh the frozen Kazi contract to 1.3.1?
