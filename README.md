@@ -205,7 +205,7 @@ Never retried: a `400`, `401`, `403`, `404` or `409` (asking again changes nothi
 
 `caller` is `key-xxxxxx` (six characters of the hash of a valid partner key, with the partner's name from `PARTNER_KEYS`), `bad-key`, `login` (a website token was sent) or `none`. The log never holds a key, a token, a password, a query string or a body. To keep it in a file: `npm start | tee requests.log` (`*.log` is ignored by git); `LOG_REQUESTS=false` turns it off.
 
-**The numbers.** `GET /api/stats` needs a partner key like the rest of the partner API (no key is a `401`) and answers the running totals since the server started. It is not part of `openapi.yaml` (the contract is frozen at 0.4.0; see `CONTRACT_DEVIATIONS.md`).
+**The numbers.** `GET /api/stats` needs a partner key like the rest of the partner API (no key is a `401`) and answers the running totals since the server started. It is Endpoint 26 of `openapi.yaml` (contract 0.5.0; see `CONTRACT_DEVIATIONS.md`).
 
 ```bash
 curl -s -H "X-API-Key: <your-api-key>" http://localhost:3000/api/stats

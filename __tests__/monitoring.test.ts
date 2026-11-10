@@ -29,11 +29,11 @@ describe('which route a request belongs to', () => {
     expect(routeLabel('BREW', '/api/courses')).toBe('OTHER /api/courses');
   });
 
-  it('the table matches openapi.yaml: every documented path has a pattern, and every pattern is documented (but /api/stats)', () => {
+  it('the table matches openapi.yaml: every documented path has a pattern, and every pattern is documented', () => {
     const spec = parse(readFileSync(join(__dirname, '..', 'openapi.yaml'), 'utf8')) as { paths: Record<string, unknown> };
     const documented = Object.keys(spec.paths);
     for (const path of documented) expect(ROUTE_TEMPLATES).toContain(path);
-    for (const template of ROUTE_TEMPLATES) if (template !== '/api/stats') expect(documented).toContain(template);
+    for (const template of ROUTE_TEMPLATES) expect(documented).toContain(template);
   });
 });
 

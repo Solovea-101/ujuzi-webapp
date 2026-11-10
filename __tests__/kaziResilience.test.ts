@@ -93,9 +93,19 @@ describe('the log says why, and never holds a key or a query', () => {
   });
 
   it('a hostname that does not exist is ENOTFOUND, not just "failed"', async () => {
-    process.env.KAZI_API_URL = 'http://kazi-does-not-exist.invalid';
-    await expect(listActiveJobs()).rejects.toBeDefined();
-    expect(lines(error)[0]).toMatch(/failed: (ENOTFOUND|EAI_AGAIN)$/);
+    // Node reports an unknown host as a TypeError "fetch failed" whose cause has the code. Simulated, because a
+    // real lookup depends on the machine's DNS (a slow resolver would read as a timeout).
+    const original = global.fetch;
+    global.fetch = (async () => {
+      throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } });
+    }) as typeof fetch;
+    try {
+      await expect(listActiveJobs()).rejects.toBeDefined();
+    } finally {
+      global.fetch = original;
+    }
+    expect(lines(error)).toEqual(['kazi GET /api/jobs failed: ENOTFOUND']);
+    expect(kaziMetrics().retries).toBe(2); // an unknown host is retried like any failed connection
   });
 
   it('too slow: "timeout"', async () => {

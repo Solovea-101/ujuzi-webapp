@@ -46,5 +46,5 @@ A **circuit breaker** is a switch that stops calling a partner that has been fai
 
 ## Still to do
 
-- TODO (the team): a screenshot of the saved-jobs banner with the partner stopped, for `evidence/`. None has been taken yet, and none is invented here.
-- The contract does not yet mention the two headers (`X-Data-Stale`, `X-Data-As-Of`): changing `openapi.yaml` after handoff needs the team's approval (CLAUDE.md, R8). Sherehe has agreed to use the same names in its own saved-data fallback.
+- Screenshots of the saved-jobs banner are in `evidence/labs/` (`saved-jobs-1` to `-4`: live, partner stopped with the banner, partner stopped with nothing saved, partner back). They are real captures of the real course page in a headless browser at phone width, on 2026-11-10 at 14:39Z, but the partner was the **stand-in** (`npm run partner:flaky`, stopped and started for real), not the ring's Kazi. The team may want its own capture against the real partner at the live demo.
+- The two headers (`X-Data-Stale`, `X-Data-As-Of`) are in `openapi.yaml` 0.5.0 on this branch, with a `CONTRACT_DEVIATIONS.md` entry. It is a contract change after handoff, so **the team must tell Sherehe's sub-team before 0.5.0 is deployed** (R8). Sherehe's agent has agreed to use the same names in its own saved-data fallback.
