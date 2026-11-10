@@ -2,16 +2,16 @@
 
 Work that the coding agent could not or should not do. Each ticket says what, why it is a human's, and how to know it is done. Everything the agent could do is already on the local branch `labs-week10-12` (nothing pushed).
 
-| # | Ticket | Owner | Blocks |
-|---|---|---|---|
-| 1 | Write the monitoring predictions | Team members | Week 12 reflection (6 pts) |
-| 2 | Tell Sherehe's sub-team about contract 0.5.0 before any deploy | Team lead | Deploying 0.5.0 (R8) |
-| 3 | Decide: refresh the frozen Kazi contract to 1.3.1? | Team | Nothing urgent |
-| 4 | Push the work and open the pull requests | Team lead | Submission |
-| 5 | After the live deploy: repeat the integration checks against the live URLs | Whoever deploys | Live demo (15 pts) |
-| 6 | Rehearse the three-step demo and book the check-in | Team | Live demo |
-| 7 | Confirm Kazi's listener warning with a live count | Kazi sub-team | INTEGRATION_LOG row 9 |
-| 8 | Sherehe's second drill (their new behaviour against ours) | Sherehe sub-team | Their Week 11 evidence |
+| # | Ticket | Owner | Blocks | Status (2026-11-10) |
+|---|---|---|---|---|
+| 1 | Write the monitoring predictions | Team members | Week 12 reflection (6 pts) | **Open.** Only the team can write them. |
+| 2 | Tell Sherehe's sub-team about contract 0.5.0 before any deploy | Team lead | Deploying 0.5.0 (R8) | **Open.** Sherehe's agent has reviewed it and has no objection; the team's own message is still needed. |
+| 3 | Decide: refresh the frozen Kazi contract to 1.3.1? | Team | Nothing urgent | **Open.** A team decision; the recommendation (refresh) stands. Say "refresh" and the agent does the steps. |
+| 4 | Push the work and open the pull requests | Team lead | Submission | **Half closed.** `uat` is pushed (`59e5429`, 2026-11-10). Pull requests to `main` or `weekNN-submission` branches are not made: they need the team's choice. |
+| 5 | After the live deploy: repeat the integration checks against the live URLs | Whoever deploys | Live demo (15 pts) | **Open.** Waiting for the live deployment. |
+| 6 | Rehearse the three-step demo and book the check-in | Team | Live demo | **Open.** Needs people. The presenting guide has the demo steps and real numbers. |
+| 7 | Confirm Kazi's listener warning with a live count | Kazi sub-team | INTEGRATION_LOG row 9 | **Open.** Kazi's agent will count connections when it next sees the warning. |
+| 8 | Sherehe's second drill (their new behaviour against ours) | Sherehe sub-team | Their Week 11 evidence | **Closed 2026-11-10.** Done on both sides (stop 14:53:13Z, start 14:54:24Z); recorded in `INTEGRATION_LOG.md`. |
 
 ## 1. Write the monitoring predictions
 
@@ -55,7 +55,7 @@ Work that the coding agent could not or should not do. Each ticket says what, wh
 **What:** Kazi's agent saw `MaxListenersExceededWarning: 11 statusChanged listeners`. The ring's Ujuzi holds 14 pending applications and opens one WebSocket for each, which fits (INTEGRATION_LOG row 9). Ask Kazi to count live connections when it next sees the warning, and decide whether to raise its listener limit.
 **Done when:** row 9 says confirmed or not, and what Kazi did.
 
-## 8. Sherehe's second drill
+## 8. Sherehe's second drill (CLOSED 2026-11-10)
 
 **What:** Sherehe's agent will ask for one more stop/start of Ujuzi once its own saved-data behaviour is built. The agent can do it again on the test instance (port 4013). Nothing needed from you unless you want to watch.
 **Done when:** both sides' results are in each team's `INTEGRATION_LOG.md`.
